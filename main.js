@@ -233,6 +233,7 @@ button.primary { background: #2f6feb; border-color: #3b82f6; }
   <button class="primary" id="open">Open Accessibility Settings</button>
   <button id="reveal">Reveal Vayu.app in Finder</button>
   <button id="prompt">Request macOS Prompt Once</button>
+  <button id="restart">Restart Vayu</button>
   <button id="quit">Quit Vayu</button>
 </div>
 <script>
@@ -240,6 +241,7 @@ const { ipcRenderer } = require('electron');
 document.getElementById('open').onclick = () => ipcRenderer.invoke('open-accessibility-settings');
 document.getElementById('reveal').onclick = () => ipcRenderer.invoke('reveal-vayu-app');
 document.getElementById('prompt').onclick = () => ipcRenderer.invoke('request-accessibility-prompt');
+document.getElementById('restart').onclick = () => ipcRenderer.invoke('restart-vayu');
 document.getElementById('quit').onclick = () => ipcRenderer.invoke('quit-vayu');
 </script>
 </body>
@@ -250,6 +252,12 @@ document.getElementById('quit').onclick = () => ipcRenderer.invoke('quit-vayu');
   permissionWindow.on('closed', () => {
     permissionWindow = null;
   });
+}
+
+function restartVayu(reason) {
+  appendRuntimeLog(`restart requested${reason ? ` reason=${reason}` : ''}`);
+  app.relaunch();
+  app.quit();
 }
 
 function createApplicationMenu() {
@@ -265,6 +273,11 @@ function createApplicationMenu() {
         {
           label: 'Accessibility Help',
           click: () => createPermissionWindow()
+        },
+        {
+          label: 'Restart Vayu',
+          accelerator: 'CommandOrControl+Shift+R',
+          click: () => restartVayu('menu')
         },
         { type: 'separator' },
         {
@@ -359,13 +372,25 @@ ipcMain.handle('show-accessibility-help', async () => {
   appendRuntimeLog('show accessibility help dialog');
 
   try {
-    await dialog.showMessageBox({
+    const result = await dialog.showMessageBox({
       type: 'warning',
       title: 'Vayu Needs Accessibility',
       message: 'Vayu copied the transcript, but macOS is blocking automatic paste.',
-      detail: 'Open System Settings -> Privacy & Security -> Accessibility, remove any old Vayu entries, add /Applications/Vayu.app, enable it, then quit and reopen Vayu.',
-      buttons: ['OK']
+      detail: 'Open System Settings -> Privacy & Security -> Accessibility, remove any old Vayu entries, add /Applications/Vayu.app, enable it, then restart Vayu.',
+      buttons: ['Open Settings', 'Restart Vayu', 'Quit Vayu', 'OK'],
+      defaultId: 0,
+      cancelId: 3
     });
+
+    if (result.response === 0) {
+      await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
+      createPermissionWindow();
+    } else if (result.response === 1) {
+      restartVayu('accessibility dialog');
+    } else if (result.response === 2) {
+      appendRuntimeLog('quit requested from accessibility dialog');
+      app.quit();
+    }
   } finally {
     accessibilityDialogOpen = false;
   }
@@ -384,6 +409,10 @@ ipcMain.handle('reveal-vayu-app', async () => {
 ipcMain.handle('request-accessibility-prompt', () => {
   appendRuntimeLog('request accessibility prompt once');
   return checkAccessibilityTrust(true);
+});
+
+ipcMain.handle('restart-vayu', () => {
+  restartVayu('permission window');
 });
 
 ipcMain.handle('quit-vayu', () => {
