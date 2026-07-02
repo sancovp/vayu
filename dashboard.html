@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vayu | Dictation Dashboard</title>
+<style>
+  :root {
+    --bg-gradient: linear-gradient(135deg, #020617 0%, #0b1528 100%);
+    --panel-bg: rgba(11, 21, 40, 0.55);
+    --border-glow: rgba(0, 240, 255, 0.12);
+    --accent-primary: #00f0ff;       /* Electric Cyan */
+    --accent-secondary: #0072ff;     /* Royal Blue */
+    --text-main: #f3f4f6;
+    --text-muted: #9ca3af;
+    --card-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg-gradient);
+    color: var(--text-main);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+  }
+
+  /* Sidebar styling */
+  aside {
+    width: 220px;
+    background: rgba(10, 12, 22, 0.85);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    z-index: 10;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 36px;
+  }
+
+  .brand svg {
+    width: 24px;
+    height: 24px;
+    fill: var(--accent-primary);
+  }
+
+  .brand-name {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, #ffffff 30%, #00f0ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 16px rgba(0, 240, 255, 0.2);
+  }
+
+  .nav-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 12px 16px;
+    border-radius: 10px;
+    text-align: left;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s ease;
+  }
+
+  .nav-btn:hover {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-main);
+  }
+
+  .nav-btn.active {
+    background: rgba(0, 240, 255, 0.12);
+    color: #00f0ff;
+    border: 1px solid rgba(0, 240, 255, 0.2);
+  }
+
+  .nav-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+  }
+
+  /* Main Workspace Container */
+  main {
+    flex: 1;
+    padding: 32px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .view-panel {
+    display: none;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .view-panel.active {
+    display: flex;
+  }
+
+  h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  /* Search & Filter Bar */
+  .search-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    width: 100%;
+  }
+
+  .search-input-wrapper {
+    position: relative;
+    flex: 1;
+  }
+
+  .search-input-wrapper svg {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    fill: var(--text-muted);
+  }
+
+  .search-input {
+    width: 100%;
+    background: rgba(8, 10, 16, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px 12px 12px 42px;
+    color: var(--text-main);
+    outline: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .search-input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
+  }
+
+  /* Horizontal Tag Filter Row */
+  .tag-filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+  }
+
+  .tag-filters::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .tag-filters::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+  }
+
+  .filter-tag-badge {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+    padding: 6px 12px;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+  }
+
+  .filter-tag-badge:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+  }
+
+  .filter-tag-badge.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #ffffff;
+  }
+
+  /* Transcripts List/Feed */
+  .feed-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .transcript-card {
+    background: var(--panel-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--card-shadow);
+    transition: all 0.25s ease;
+  }
+
+  .transcript-card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-2px);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .card-date {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .card-text {
+    font-size: 1.05rem;
+    line-height: 1.5;
+    color: var(--text-main);
+    margin-bottom: 14px;
+    word-wrap: break-word;
+  }
+
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tag-badge {
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    color: #c084fc;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  /* Metrics Grid */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  .metric-card {
+    background: var(--panel-bg);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: var(--card-shadow);
+  }
+
+  .metric-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .metric-value {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  /* Stats Visualizer Layout */
+  .stats-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .stats-section-card {
+    background: var(--panel-bg);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: var(--card-shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .stats-section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding-bottom: 10px;
+  }
+
+  /* Custom Bar Chart */
+  .chart-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+
+  .chart-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .chart-label {
+    width: 90px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chart-bar-bg {
+    flex: 1;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .chart-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .chart-count {
+    width: 30px;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    font-weight: 700;
+    text-align: right;
+  }
+
+  /* Tag Combination Matrix list */
+  .combo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+
+  .combo-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .combo-pair {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .combo-plus {
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  .combo-count {
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    color: #c084fc;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <img src="assets/vayu_transparent.png" alt="Vayu Logo" style="width: 28px; height: 28px; object-fit: contain;">
+    <div class="brand-name">VAYU</div>
+  </div>
+  
+  <button id="navFeed" class="nav-btn active">
+    <svg viewBox="0 0 24 24"><path d="M4 14h6v-4H4v4zm0 5h6v-4H4v4zM4 9h6V5H4v4zm10 10h6v-4h-6v4zm0-9v4h6v-4h-6zm0-5v4h6V5h-6z"/></svg>
+    Transcripts Feed
+  </button>
+  
+  <button id="navStats" class="nav-btn">
+    <svg viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+    Tag Statistics
+  </button>
+</aside>
+
+<main>
+  <!-- TAB 1: Transcripts Feed -->
+  <div id="panelFeed" class="view-panel active">
+    <h2>Dictation Transcripts</h2>
+    
+    <div class="search-row">
+      <div class="search-input-wrapper">
+        <svg viewBox="0 0 24 24">
+          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 5 9.5 7.01 14 9.5 14z"/>
+        </svg>
+        <input type="text" id="searchInput" class="search-input" placeholder="Search transcripts...">
+      </div>
+    </div>
+
+    <!-- Active Filter Tags -->
+    <div id="tagFilterRow" class="tag-filters">
+      <!-- Generated via JS -->
+    </div>
+
+    <div id="feedList" class="feed-container">
+      <!-- Generated via JS -->
+    </div>
+  </div>
+
+  <!-- TAB 2: Tag Statistics -->
+  <div id="panelStats" class="view-panel">
+    <h2>Tag Insights Dashboard</h2>
+    
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Total Dictations</div>
+        <div id="metricTotalDictations" class="metric-value">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total Tags Logged</div>
+        <div id="metricTotalTags" class="metric-value">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Unique Combinations</div>
+        <div id="metricUniqueCombos" class="metric-value">0</div>
+      </div>
+    </div>
+
+    <div class="stats-split">
+      <!-- Tag Frequency Chart -->
+      <div class="stats-section-card">
+        <div class="stats-section-title">Tag Frequency</div>
+        <div id="tagChart" class="chart-container">
+          <!-- Bars generated via JS -->
+        </div>
+      </div>
+
+      <!-- Tag Combinations Stats List -->
+      <div class="stats-section-card">
+        <div class="stats-section-title">Co-occurrence Tag Combinations</div>
+        <div id="comboList" class="combo-list">
+          <!-- Combinations list generated via JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  // Core Node.js bindings
+  const db = require('./db.js');
+
+  // Elements
+  const navFeed = document.getElementById('navFeed');
+  const navStats = document.getElementById('navStats');
+  const panelFeed = document.getElementById('panelFeed');
+  const panelStats = document.getElementById('panelStats');
+  
+  const searchInput = document.getElementById('searchInput');
+  const tagFilterRow = document.getElementById('tagFilterRow');
+  const feedList = document.getElementById('feedList');
+
+  const metricTotalDictations = document.getElementById('metricTotalDictations');
+  const metricTotalTags = document.getElementById('metricTotalTags');
+  const metricUniqueCombos = document.getElementById('metricUniqueCombos');
+  const tagChart = document.getElementById('tagChart');
+  const comboList = document.getElementById('comboList');
+
+  // Application Data State
+  let allTranscripts = [];
+  let activeTagFilter = null;
+
+  // 1. Navigation Panel Toggles
+  navFeed.addEventListener('click', () => {
+    navFeed.classList.add('active');
+    navStats.classList.remove('active');
+    panelFeed.classList.add('active');
+    panelStats.classList.remove('active');
+    renderFeed();
+  });
+
+  navStats.addEventListener('click', () => {
+    navFeed.classList.remove('active');
+    navStats.classList.add('active');
+    panelFeed.classList.remove('active');
+    panelStats.classList.add('active');
+    calculateStats();
+  });
+
+  // 2. Fetch Data & Build UI
+  function loadData() {
+    allTranscripts = db.getAllTranscripts();
+    renderFilters();
+    renderFeed();
+  }
+
+  function renderFilters() {
+    // Collect all unique tags and sort
+    const tags = new Set();
+    allTranscripts.forEach(t => {
+      if (t.tags) t.tags.forEach(tag => tags.add(tag));
+    });
+    const sortedTags = Array.from(tags).sort();
+
+    let html = `<div class="filter-tag-badge ${activeTagFilter === null ? 'active' : ''}" onclick="toggleTagFilter(null)">All</div>`;
+    sortedTags.forEach(tag => {
+      html += `<div class="filter-tag-badge ${activeTagFilter === tag ? 'active' : ''}" onclick="toggleTagFilter('${tag}')">${tag}</div>`;
+    });
+    tagFilterRow.innerHTML = html;
+  }
+
+  window.toggleTagFilter = function(tag) {
+    activeTagFilter = tag;
+    renderFilters();
+    renderFeed();
+  };
+
+  function renderFeed() {
+    const searchVal = searchInput.value.toLowerCase();
+    
+    // Filter transcripts
+    const filtered = allTranscripts.filter(t => {
+      const matchSearch = t.text.toLowerCase().includes(searchVal);
+      const matchTag = activeTagFilter === null || (t.tags && t.tags.includes(activeTagFilter));
+      return matchSearch && matchTag;
+    });
+
+    if (filtered.length === 0) {
+      feedList.innerHTML = `<div style="text-align:center; padding: 40px; color: var(--text-muted);">No dictations match search filters.</div>`;
+      return;
+    }
+
+    let html = "";
+    filtered.forEach(t => {
+      const dateStr = new Date(t.timestamp).toLocaleString();
+      let tagHtml = "";
+      if (t.tags) {
+        t.tags.forEach(tag => {
+          tagHtml += `<span class="tag-badge">${tag}</span>`;
+        });
+      }
+      
+      html += `
+        <div class="transcript-card">
+          <div class="card-header">
+            <div class="card-date">${dateStr}</div>
+          </div>
+          <div class="card-text">${escapeHtml(t.text)}</div>
+          <div class="card-tags">${tagHtml}</div>
+        </div>
+      `;
+    });
+    feedList.innerHTML = html;
+  }
+
+  searchInput.addEventListener('input', renderFeed);
+
+  // 3. Stats Calculation Engine
+  function calculateStats() {
+    metricTotalDictations.textContent = allTranscripts.length;
+
+    const tagCounts = {};
+    const comboCounts = {};
+    let totalTagLogs = 0;
+
+    allTranscripts.forEach(t => {
+      const currentTags = t.tags || [];
+      totalTagLogs += currentTags.length;
+      
+      // Calculate single tag frequencies
+      currentTags.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+
+      // Calculate co-occurring tag combinations (combinations of pairs)
+      if (currentTags.length > 1) {
+        for (let i = 0; i < currentTags.length; i++) {
+          for (let j = i + 1; j < currentTags.length; j++) {
+            // Sort keys so pair [A, B] and [B, A] are grouped identically
+            const pair = [currentTags[i], currentTags[j]].sort();
+            const pairKey = pair.join(' + ');
+            comboCounts[pairKey] = (comboCounts[pairKey] || 0) + 1;
+          }
+        }
+      }
+    });
+
+    metricTotalTags.textContent = totalTagLogs;
+    metricUniqueCombos.textContent = Object.keys(comboCounts).length;
+
+    // A. Render Frequency Chart
+    const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+    const maxTagCount = sortedTags.length > 0 ? sortedTags[0][1] : 1;
+
+    let chartHtml = "";
+    if (sortedTags.length === 0) {
+      chartHtml = `<div style="text-align:center; padding:20px; color:var(--text-muted);">No tag statistics yet.</div>`;
+    } else {
+      sortedTags.forEach(([tag, count]) => {
+        const pct = (count / maxTagCount) * 100;
+        chartHtml += `
+          <div class="chart-row">
+            <div class="chart-label" title="${tag}">${tag}</div>
+            <div class="chart-bar-bg">
+              <div class="chart-bar-fill" style="width: ${pct}%"></div>
+            </div>
+            <div class="chart-count">${count}</div>
+          </div>
+        `;
+      });
+    }
+    tagChart.innerHTML = chartHtml;
+
+    // B. Render Combo Lists
+    const sortedCombos = Object.entries(comboCounts).sort((a, b) => b[1] - a[1]);
+    let comboHtml = "";
+    if (sortedCombos.length === 0) {
+      comboHtml = `<div style="text-align:center; padding:20px; color:var(--text-muted);">No tag combinations yet. Need multiple tags in transcripts.</div>`;
+    } else {
+      sortedCombos.forEach(([pairKey, count]) => {
+        const parts = pairKey.split(' + ');
+        comboHtml += `
+          <div class="combo-item">
+            <div class="combo-pair">
+              <span class="tag-badge" style="margin:0;">${parts[0]}</span>
+              <span class="combo-plus">+</span>
+              <span class="tag-badge" style="margin:0;">${parts[1]}</span>
+            </div>
+            <div class="combo-count">${count} co-occurrences</div>
+          </div>
+        `;
+      });
+    }
+    comboList.innerHTML = comboHtml;
+  }
+
+  // Escape HTML helper
+  function escapeHtml(text) {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // Load on start
+  window.onload = () => {
+    loadData();
+  };
+</script>
+</body>
+</html>

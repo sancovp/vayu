@@ -1,0 +1,27 @@
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Electron package output
+Vayu-darwin-*/
+dist/
+out/
+release/
+
+# Compiled local helpers
+helper
+*.o
+
+# Runtime data
+transcripts/
+*.log
+*_error.log
+
+# Local environment
+.env
+.env.*
+
+# Editor metadata
+.idea/
+.vscode/

@@ -1,0 +1,16 @@
+{
+  "name": "vayu",
+  "version": "1.0.0",
+  "description": "Vayu global voice dictation overlay utilizing local Whisperflow",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "package-mac": "clang -O3 helper.cpp -framework CoreGraphics -framework CoreFoundation -lstdc++ -o helper && electron-packager . Vayu --platform=darwin --arch=arm64 --overwrite --extend-info=extend.plist --icon=assets/vayu.icns --app-bundle-id=com.vayu.dictation && rm -rf /Applications/Vayu.app && cp -R Vayu-darwin-arm64/Vayu.app /Applications/Vayu.app && cp helper /Applications/Vayu.app/Contents/MacOS/helper && chmod +x /Applications/Vayu.app/Contents/MacOS/helper && codesign --force --deep --sign - /Applications/Vayu.app"
+  },
+  "dependencies": {
+    "electron": "^31.0.0"
+  },
+  "devDependencies": {
+    "electron-packager": "^17.1.2"
+  }
+}

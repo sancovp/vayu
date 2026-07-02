@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vayu Overlay</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 10px;
+    user-select: none;
+    -webkit-app-region: drag; /* Allows dragging the overlay window */
+  }
+  
+  #container {
+    width: 380px;
+    background: rgba(3, 7, 18, 0.65);
+    backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(0, 240, 255, 0.12);
+    border-radius: 22px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px;
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+    transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), 
+                transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    -webkit-app-region: no-drag;
+  }
+  
+  #container.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  #header-row {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  
+  #text-display {
+    flex: 1;
+    color: #f3f4f6;
+    font-size: 13.5px;
+    line-height: 1.5;
+    text-align: left;
+    min-height: 38px;
+    max-height: 60px;
+    overflow-y: auto;
+    padding: 0 6px;
+    font-weight: 500;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    word-wrap: break-word;
+  }
+  
+  #text-display:empty::before {
+    content: "Speak now...";
+    color: rgba(0, 240, 255, 0.6);
+    font-style: italic;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+  }
+
+  #dash-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    width: 24px;
+    height: 24px;
+    color: #9ca3af;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  #dash-btn:hover {
+    background: rgba(0, 240, 255, 0.15);
+    border-color: #00f0ff;
+    color: #00f0ff;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
+  }
+
+  #wave-wrapper {
+    position: relative;
+    width: 320px;
+    height: 68px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 4px;
+  }
+
+  #logo-icon {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    pointer-events: none;
+    z-index: 5;
+    animation: breathe 2.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes breathe {
+    0% {
+      transform: scale(0.94);
+      filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.4)) brightness(0.9);
+    }
+    100% {
+      transform: scale(1.04);
+      filter: drop-shadow(0 0 16px rgba(0, 240, 255, 0.7)) brightness(1.1);
+    }
+  }
+
+  canvas {
+    display: block;
+    width: 320px;
+    height: 68px;
+    background: transparent;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+
+<div id="container">
+  <div id="header-row">
+    <div id="text-display"></div>
+    <button id="dash-btn" title="Open Dashboard">↗</button>
+  </div>
+  <div id="wave-wrapper">
+    <canvas id="gl"></canvas>
+    <img id="logo-icon" src="assets/vayu_transparent.png" alt="Vayu Logo">
+  </div>
+</div>
+
+<!-- ================= Shaders ================= -->
+<script id="vs" type="x-shader/x-vertex">
+  attribute vec2 aPos; void main(){ gl_Position=vec4(aPos,0.0,1.0); }
+</script>
+
+<script id="fs-wave" type="x-shader/x-fragment">
+  precision highp float;
+  uniform vec2 iResolution; 
+  uniform float iTime;
+  uniform float uVolume; // Driven by microphone volume (0.0 - 1.0+)
+  
+  const float PI = 3.14159265359;
+  const float AMPLITUDE   = 0.20;
+  const float FREQ        = 1.05;
+  const float ABER_FREQ   = 0.95;
+  const float SPEED       = 2.0;
+  const float WAVE_SCALE  = 0.95;
+  const float ABERRATION  = 2.0;
+  const float THICKNESS   = 2.8;
+  const float INTENSITY   = 2.4;
+  const float FALLOFF     = 1.8;
+  const float EDGE_MASK   = 0.5;
+  const float EDGE_INSET  = 0.0;
+  const float BAND_FILL   = 32000.0;
+  const float BAND_THICK  = 0.06;
+  const float SOFTNESS    = 2.2;
+
+  vec3 spectral4(int s){
+      float x = float(s);
+      return clamp(vec3(abs(x-3.0)-1.0, 2.0-abs(x-2.0), 2.0-abs(x-4.0)), 0.0, 1.0);
+  }
+
+  void main() {
+      vec2 R = iResolution.xy;
+      vec2 p = (gl_FragCoord.xy + 0.5) * 2.0 / R - 1.0;
+      float aspect = R.x / R.y;
+      p.x *= aspect;
+      float yScreen = p.y;
+      p /= WAVE_SCALE;
+
+      float t = iTime;
+      float drift = mod(t, 20.0*PI) * SPEED;
+
+      float xN  = p.x / max(aspect, 1.0);
+      float env = cos(PI*0.5 * min(abs(0.9*xN), 1.0));
+      env *= env;
+
+      // Bind amplitude and intensities dynamically to mic volume
+      float volScale = clamp(0.45 + uVolume * 1.0, 0.45, 1.4);
+      float A1    = (AMPLITUDE + 0.04 * sin(t * 2.0)) * volScale;
+      float A2    = A1 * 1.15;
+      float AB    = ABERRATION * (0.6 + 0.4 * volScale);
+      float th    = 0.01 * THICKNESS;
+      float inten = 0.01 * INTENSITY * (0.5 + 0.5 * volScale);
+      float soft  = 0.01 * SOFTNESS;
+
+      float yMain = A1 * env * sin(p.x*FREQ + drift);
+
+      float bandFillTh = max(BAND_THICK, 1e-4);
+      float bandAmt    = 1e-4 * BAND_FILL * inten;
+      vec3 num = vec3(0.0), den = vec3(0.0);
+      for(int s = 0; s < 4; s++){
+          vec3 hue = spectral4(s);
+          den += hue;
+          float ab = mix(-AB, AB, float(s)/3.0);
+          float yL = A2 * env * sin(p.x*ABER_FREQ + drift + ab);
+          float d   = abs(p.y - yL);
+          float lor = 1.0/(1.0 + (0.02*d)*(0.02*d));
+          float line = inten / (sqrt(d*d + soft*soft) + th);
+          float lo = min(yMain, yL), hi = max(yMain, yL);
+          float dBand = max(0.0, max(p.y - hi, lo - p.y));
+          float band  = bandAmt / (dBand + bandFillTh);
+          num += hue * lor * (line + band);
+      }
+      vec3 col = num / den;
+
+      float dM    = abs(p.y - yMain);
+      float lorM  = 1.0/(1.0 + (0.02*dM)*(0.02*dM));
+      col += 0.5 * inten * lorM / (sqrt(dM*dM + soft*soft) + th);
+
+      col = pow(max(col, 0.0), vec3(1.3));
+      float emT = clamp((abs(yScreen) - 1.0 + EDGE_INSET) / (-max(EDGE_MASK, 1e-4)), 0.0, 1.0);
+      float em  = emT*emT*(3.0 - 2.0*emT);
+      float gauss = exp(-pow(xN*FALLOFF, 2.0));
+      col *= em*gauss;
+      
+      gl_FragColor = vec4(col, col.r + col.g + col.b > 0.02 ? 1.0 : 0.0);
+  }
+</script>
+
+<!-- ================= Renderer & Recording ================= -->
+<script>
+  const rendererFs = require('fs');
+  const rendererOs = require('os');
+  const rendererPath = require('path');
+  const rendererDataDir = process.env.VAYU_DATA_DIR || rendererPath.join(rendererOs.homedir(), 'Library', 'Application Support', 'Vayu');
+  rendererFs.mkdirSync(rendererDataDir, { recursive: true });
+  const rendererLogPath = rendererPath.join(rendererDataDir, 'vayu_renderer.log');
+
+  function rendererLog(message) {
+    rendererFs.appendFileSync(rendererLogPath, `${new Date().toISOString()} ${message}\n`);
+  }
+
+  // Global renderer error logger
+  window.onerror = function (message, source, lineno, colno, error) {
+    const errPath = rendererPath.join(rendererDataDir, 'vayu_renderer_error.log');
+    rendererFs.writeFileSync(errPath, `Renderer Error: ${message}\nSource: ${source}\nLine: ${lineno}:${colno}\nStack: ${error ? error.stack : 'N/A'}\n`);
+    rendererLog(`window.onerror ${message} ${source}:${lineno}:${colno}`);
+    return false;
+  };
+
+  window.onunhandledrejection = function (event) {
+    const detail = event.reason && event.reason.stack ? event.reason.stack : String(event.reason);
+    const errPath = rendererPath.join(rendererDataDir, 'vayu_renderer_error.log');
+    rendererFs.writeFileSync(errPath, `Renderer Unhandled Rejection: ${detail}\n`);
+    rendererLog(`window.onunhandledrejection ${detail}`);
+  };
+
+  // Core Node.js bindings in Electron
+  const { execFile } = require('child_process');
+  const { clipboard, ipcRenderer } = require('electron');
+  
+  // Custom Vayu storage modules
+  const db = require('./db.js');
+  const tagger = require('./tagger.js');
+
+  // UI elements
+  const container = document.getElementById('container');
+  const textDisplay = document.getElementById('text-display');
+  const canvas = document.getElementById('gl');
+  const dashBtn = document.getElementById('dash-btn');
+
+  // WebGL State
+  let gl, prog, uVolLoc, uTimeLoc, uResLoc;
+  let timeStart = Date.now();
+  let volumeVal = 0.05;
+
+  // Audio Recording State
+  let audioContext = null;
+  let mediaStream = null;
+  let scriptProcessor = null;
+  let wsTranscriber = null;
+  let wsDaemon = null;
+  let isRecording = false;
+  let isStartingRecording = false;
+  let isStoppingRecording = false;
+  let transcribedText = "";
+  let committedTranscriptText = "";
+  let liveTranscriptFragment = "";
+
+  function getHelperPath() {
+    if (process.resourcesPath) {
+      return rendererPath.join(process.resourcesPath, '..', 'MacOS', 'helper');
+    }
+    return rendererPath.join(__dirname, 'helper');
+  }
+
+  function joinTranscriptParts(left, right) {
+    const a = (left || "").trim();
+    const b = (right || "").trim();
+
+    if (!a) return b;
+    if (!b) return a;
+    if (a.endsWith(" ") || /^[.,!?;:]/.test(b)) return `${a}${b}`;
+    return `${a} ${b}`;
+  }
+
+  function mergeTranscriptUpdate(rawText) {
+    const incoming = String(rawText || "").trim();
+    if (!incoming) return;
+
+    if (!liveTranscriptFragment) {
+      liveTranscriptFragment = incoming;
+    } else if (incoming === liveTranscriptFragment) {
+      // Same partial repeated by the transcriber; keep the display stable.
+    } else if (incoming.startsWith(liveTranscriptFragment)) {
+      liveTranscriptFragment = incoming;
+    } else if (liveTranscriptFragment.startsWith(incoming)) {
+      // Older/shorter partial arrived after a fuller hypothesis; ignore it.
+    } else {
+      committedTranscriptText = joinTranscriptParts(committedTranscriptText, liveTranscriptFragment);
+      liveTranscriptFragment = incoming;
+    }
+
+    transcribedText = joinTranscriptParts(committedTranscriptText, liveTranscriptFragment);
+  }
+
+  // 1. Initialize WebGL Siri Wave
+  function initWebGL() {
+    gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+    if (!gl) {
+      console.error("WebGL not supported");
+      return;
+    }
+    
+    // Shader Compile
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, document.getElementById('vs').textContent);
+    gl.compileShader(vs);
+    
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, document.getElementById('fs-wave').textContent);
+    gl.compileShader(fs);
+    
+    prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error("Shader Link Error:", gl.getProgramInfoLog(prog));
+      return;
+    }
+    
+    gl.useProgram(prog);
+    
+    // Bind single fullscreen quad
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+    
+    const aPos = gl.getAttribLocation(prog, 'aPos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    
+    uVolLoc = gl.getUniformLocation(prog, 'uVolume');
+    uTimeLoc = gl.getUniformLocation(prog, 'iTime');
+    uResLoc = gl.getUniformLocation(prog, 'iResolution');
+    
+    resize();
+    window.addEventListener('resize', resize);
+    requestAnimationFrame(render);
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvas.clientWidth * dpr;
+    canvas.height = canvas.clientHeight * dpr;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+
+  function render() {
+    if (!gl) return;
+    const t = (Date.now() - timeStart) / 1000.0;
+    
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    
+    gl.uniform2f(uResLoc, canvas.width, canvas.height);
+    gl.uniform1f(uTimeLoc, t);
+    // Smooth volume updates
+    gl.uniform1f(uVolLoc, volumeVal);
+    
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    requestAnimationFrame(render);
+  }
+
+  // 2. Audio downsampling and PCM streaming to local Whisperflow server
+  async function connectTranscriberWS() {
+    return new Promise((resolve, reject) => {
+      wsTranscriber = new WebSocket("ws://localhost:8181/ws");
+      wsTranscriber.binaryType = "arraybuffer";
+      
+      wsTranscriber.onopen = () => {
+        console.log("Connected to Whisperflow transcriber.");
+        rendererLog('transcriber websocket open');
+        resolve();
+      };
+      
+      wsTranscriber.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.text) {
+          mergeTranscriptUpdate(data.text);
+          textDisplay.textContent = transcribedText;
+          rendererLog(`transcriber text length=${transcribedText.length}`);
+          // Scroll text display to bottom
+          textDisplay.scrollTop = textDisplay.scrollHeight;
+        }
+      };
+      
+      wsTranscriber.onerror = (err) => {
+        console.error("Transcriber WS error:", err);
+        rendererLog(`transcriber websocket error ${err && err.message ? err.message : 'unknown'}`);
+        reject(err);
+      };
+      
+      wsTranscriber.onclose = () => {
+        console.log("Transcriber WS closed.");
+        rendererLog('transcriber websocket closed');
+      };
+    });
+  }
+
+  async function startRecording() {
+    if (isRecording || isStartingRecording || isStoppingRecording) {
+      rendererLog(`startRecording ignored isRecording=${isRecording} isStarting=${isStartingRecording} isStopping=${isStoppingRecording}`);
+      return;
+    }
+    isStartingRecording = true;
+    transcribedText = "";
+    committedTranscriptText = "";
+    liveTranscriptFragment = "";
+    textDisplay.textContent = "";
+    rendererLog('startRecording called');
+    
+    try {
+      // Connect to Whisperflow if not already open
+      if (!wsTranscriber || wsTranscriber.readyState !== WebSocket.OPEN) {
+        await connectTranscriberWS();
+      }
+      
+      // Request mic access
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      rendererLog(`microphone stream acquired tracks=${mediaStream.getTracks().length}`);
+      
+      // Initialize AudioContext downsampled to 16kHz
+      audioContext = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: 16000
+      });
+      
+      // Force AudioContext to resume (necessary for Chromium sandboxes)
+      await audioContext.resume();
+      
+      const source = audioContext.createMediaStreamSource(mediaStream);
+      
+      // ScriptProcessor node to downsample to 16-bit signed PCM
+      scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+      scriptProcessor.onaudioprocess = (event) => {
+        if (!isRecording || !wsTranscriber || wsTranscriber.readyState !== WebSocket.OPEN) return;
+        
+        const inputData = event.inputBuffer.getChannelData(0);
+        
+        // Calculate volume directly from raw floats (RMS)
+        let sumSquares = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sumSquares += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sumSquares / inputData.length);
+        
+        // Map RMS (0.0 to ~0.5) to reactive visualizer volume scale
+        const targetVolume = Math.min(1.0, rms * 4.5);
+        volumeVal = volumeVal * 0.72 + targetVolume * 0.28; // Smooth, responsive EMA
+        
+        const pcmBuffer = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          const s = Math.max(-1, Math.min(1, inputData[i]));
+          pcmBuffer[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        // Send raw PCM bytes directly
+        wsTranscriber.send(pcmBuffer.buffer);
+      };
+      
+      source.connect(scriptProcessor);
+      scriptProcessor.connect(audioContext.destination);
+      
+      isRecording = true;
+      console.log("Recording and streaming audio.");
+      rendererLog('recording streaming audio');
+    } catch (err) {
+      console.error("Recording start failed:", err);
+      rendererLog(`recording start failed ${err && err.message ? err.message : err}`);
+      textDisplay.textContent = `Error: ${err.message || err}`;
+      stopRecording();
+    } finally {
+      isStartingRecording = false;
+    }
+  }
+
+  function stopRecording() {
+    rendererLog(`stopRecording called wasRecording=${isRecording}`);
+    isRecording = false;
+    volumeVal = 0.05;
+    
+    if (scriptProcessor) {
+      scriptProcessor.disconnect();
+      scriptProcessor = null;
+    }
+    if (audioContext) {
+      audioContext.close();
+      audioContext = null;
+    }
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+      mediaStream = null;
+    }
+    if (wsTranscriber && wsTranscriber.readyState === WebSocket.OPEN) {
+      wsTranscriber.close();
+    }
+  }
+
+  let pressStartTime = 0;
+
+  async function pasteClipboardIntoFrontmostApp() {
+    const trusted = await ipcRenderer.invoke('check-accessibility-trust', false);
+    rendererLog(`paste accessibility trusted=${trusted}`);
+
+    if (!trusted) {
+      rendererLog('paste blocked pending Accessibility permission for Vayu.app');
+      textDisplay.textContent = 'Grant Vayu Accessibility, then try again.';
+      ipcRenderer.invoke('show-accessibility-help');
+      return;
+    }
+
+    const helperPath = getHelperPath();
+    rendererLog(`paste invoking helper=${helperPath}`);
+    execFile(helperPath, ['--paste'], (error, stdout, stderr) => {
+      if (error) {
+        console.error("Paste execution error:", error);
+        const errPath = rendererPath.join(rendererDataDir, 'paste_error.log');
+        rendererFs.writeFileSync(errPath, `Error: ${error.message}\nStderr: ${stderr}\nStdout: ${stdout}\n`);
+        rendererLog(`paste failed ${error.message}`);
+      } else {
+        rendererLog(`paste complete helper=${helperPath}`);
+      }
+    });
+  }
+
+  function stopAndPaste() {
+    if (isStoppingRecording) {
+      rendererLog('stopAndPaste ignored because stop already in progress');
+      return;
+    }
+    isStoppingRecording = true;
+    rendererLog(`stopAndPaste called textLength=${transcribedText.trim().length}`);
+    stopRecording();
+    
+    if (transcribedText.trim()) {
+      // A. Extract tags dynamically using heuristics
+      const tags = tagger.extractTags(transcribedText);
+      
+      // B. Save transcript entry as structured YAML
+      db.saveTranscript(transcribedText, tags);
+      rendererLog(`transcript saved tags=${tags.join(',')}`);
+
+      // C. Copy text to clipboard
+      clipboard.writeText(transcribedText);
+      console.log(`Copied text with tags [${tags.join(', ')}]: "${transcribedText}"`);
+      rendererLog('clipboard write complete');
+    } else {
+      rendererLog('stopAndPaste skipped paste because transcript was empty');
+    }
+    
+    // Hide the overlay before pasting so the previous frontmost app remains the target.
+    setTimeout(() => {
+      container.classList.remove('visible');
+      setTimeout(() => {
+        ipcRenderer.send('hide-window');
+        if (transcribedText.trim()) {
+          setTimeout(pasteClipboardIntoFrontmostApp, 350);
+        }
+        isStoppingRecording = false;
+      }, 300);
+    }, 120);
+  }
+
+  // 3. Coordinate with native Electron global-shortcut-event (Control + Space)
+  // Handles hold-to-talk (>450ms press duration) and tap-to-toggle (<=450ms press duration)
+  ipcRenderer.on('global-shortcut-event', async (event, cmd) => {
+    rendererLog(`ipc global-shortcut-event ${cmd} isRecording=${isRecording}`);
+    if (cmd === "toggle") {
+      if (isStartingRecording || isStoppingRecording) {
+        rendererLog(`fallback toggle ignored busy isStarting=${isStartingRecording} isStopping=${isStoppingRecording}`);
+      } else if (isRecording) {
+        console.log("Hotkey fallback toggle: stopping recording...");
+        rendererLog('fallback toggle stopping recording');
+        stopAndPaste();
+      } else {
+        console.log("Hotkey fallback toggle: starting recording...");
+        rendererLog('fallback toggle starting recording');
+        pressStartTime = Date.now();
+        container.classList.add('visible');
+        ipcRenderer.send('show-window');
+        await startRecording();
+      }
+    } else if (cmd === "keydown") {
+      if (isRecording) {
+        // If already recording, the second keydown acts as a TAP toggle to STOP
+        console.log("Hotkey toggle: stopping recording...");
+        rendererLog('hotkey toggle stopping recording');
+        stopAndPaste();
+      } else {
+        // Start recording
+        console.log("Hotkey pressed: starting recording...");
+        rendererLog('hotkey starting recording');
+        pressStartTime = Date.now();
+        container.classList.add('visible');
+        ipcRenderer.send('show-window');
+        await startRecording();
+      }
+    } else if (cmd === "keyup") {
+      if (isRecording) {
+        const duration = Date.now() - pressStartTime;
+        if (duration > 450) {
+          // Held for more than 450ms: stop recording on release (push-to-talk)
+          console.log("Hold release detected: stopping recording...");
+          rendererLog(`hold release stopping recording duration=${duration}`);
+          stopAndPaste();
+        } else {
+          // Brief tap: keep recording (toggle mode active)
+          console.log("Brief tap detected: keeping recording open...");
+          rendererLog(`brief tap keep open duration=${duration}`);
+        }
+      }
+    }
+  });
+
+  // 4. Hover Interactive Overlay Configuration
+  container.addEventListener('mouseenter', () => {
+    // Enable hover inputs/clicks on the overlay so button can be clicked
+    ipcRenderer.send('set-ignore-mouse', false);
+  });
+
+  container.addEventListener('mouseleave', () => {
+    // Restore click-through mode when cursor leaves
+    ipcRenderer.send('set-ignore-mouse', true, { forward: true });
+  });
+
+  // Open Dashboard handler
+  dashBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    ipcRenderer.send('open-dashboard');
+  });
+
+  // Startup
+  window.onload = () => {
+    rendererLog('window.onload initWebGL');
+    initWebGL();
+  };
+</script>
+</body>
+</html>
