@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, systemPreferences, globalShortcut, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, systemPreferences, globalShortcut, Menu, dialog, shell, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 let mainWindow = null;
 let dashboardWindow = null;
 let permissionWindow = null;
+let statusTray = null;
 let daemonProcess = null;
 let lastShortcutAt = 0;
 let lastGlobalShortcutActivationAt = 0;
@@ -193,6 +194,8 @@ function createDashboardWindow() {
 function createPermissionWindow() {
   appendRuntimeLog('createPermissionWindow called');
   if (permissionWindow) {
+    permissionWindow.show();
+    permissionWindow.moveTop();
     permissionWindow.focus();
     return;
   }
@@ -203,11 +206,15 @@ function createPermissionWindow() {
     title: 'Vayu Permissions',
     backgroundColor: '#10131a',
     show: true,
+    alwaysOnTop: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
     }
   });
+
+  permissionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  permissionWindow.setAlwaysOnTop(true, 'floating');
 
   const html = `
 <!DOCTYPE html>
@@ -248,6 +255,12 @@ document.getElementById('quit').onclick = () => ipcRenderer.invoke('quit-vayu');
 </html>`;
 
   permissionWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  permissionWindow.once('ready-to-show', () => {
+    permissionWindow.show();
+    permissionWindow.moveTop();
+    permissionWindow.focus();
+  });
 
   permissionWindow.on('closed', () => {
     permissionWindow = null;
@@ -298,6 +311,79 @@ function createApplicationMenu() {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
   appendRuntimeLog('application menu installed');
+}
+
+function createStatusTray() {
+  if (statusTray) {
+    return;
+  }
+
+  const trayIconPath = path.join(__dirname, 'assets', 'vayu_transparent.png');
+  let trayIcon = nativeImage.createFromPath(trayIconPath);
+  if (trayIcon.isEmpty()) {
+    trayIcon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'vayu.png'));
+  }
+  if (!trayIcon.isEmpty()) {
+    trayIcon = trayIcon.resize({ width: 18, height: 18 });
+    trayIcon.setTemplateImage(true);
+  } else {
+    trayIcon = nativeImage.createEmpty();
+  }
+
+  statusTray = new Tray(trayIcon);
+  statusTray.setToolTip('Vayu Dictation');
+  statusTray.setContextMenu(buildStatusTrayMenu());
+  statusTray.on('click', () => {
+    statusTray.popUpContextMenu(buildStatusTrayMenu());
+  });
+  appendRuntimeLog('status tray installed');
+}
+
+function buildStatusTrayMenu() {
+  const trusted = checkAccessibilityTrust(false);
+  return Menu.buildFromTemplate([
+    {
+      label: trusted ? 'Vayu Ready' : 'Vayu Needs Accessibility',
+      enabled: false
+    },
+    { type: 'separator' },
+    {
+      label: 'Open Dashboard',
+      click: () => createDashboardWindow()
+    },
+    {
+      label: 'Accessibility Help',
+      click: () => createPermissionWindow()
+    },
+    {
+      label: 'Open Accessibility Settings',
+      click: () => openAccessibilitySettings()
+    },
+    { type: 'separator' },
+    {
+      label: 'Restart Vayu',
+      click: () => restartVayu('status tray')
+    },
+    {
+      label: 'Quit Vayu',
+      click: () => {
+        appendRuntimeLog('quit requested from status tray');
+        app.quit();
+      }
+    }
+  ]);
+}
+
+async function openAccessibilitySettings() {
+  appendRuntimeLog('open accessibility settings');
+  await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
+  createPermissionWindow();
+  setTimeout(() => {
+    if (permissionWindow) {
+      permissionWindow.show();
+      permissionWindow.moveTop();
+    }
+  }, 800);
 }
 
 function sendShortcutEvent(cmd, source) {
@@ -383,8 +469,7 @@ ipcMain.handle('show-accessibility-help', async () => {
     });
 
     if (result.response === 0) {
-      await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
-      createPermissionWindow();
+      await openAccessibilitySettings();
     } else if (result.response === 1) {
       restartVayu('accessibility dialog');
     } else if (result.response === 2) {
@@ -397,8 +482,7 @@ ipcMain.handle('show-accessibility-help', async () => {
 });
 
 ipcMain.handle('open-accessibility-settings', async () => {
-  appendRuntimeLog('open accessibility settings');
-  await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
+  await openAccessibilitySettings();
 });
 
 ipcMain.handle('reveal-vayu-app', async () => {
@@ -428,11 +512,16 @@ if (!gotTheLock) {
 } else {
   // If a second instance is launched, focus the dashboard
   app.on('second-instance', () => {
-    createDashboardWindow();
+    if (!checkAccessibilityTrust(false)) {
+      createPermissionWindow();
+    } else {
+      createDashboardWindow();
+    }
   });
 
   app.whenReady().then(() => {
     createApplicationMenu();
+    createStatusTray();
     const accessibilityTrusted = checkAccessibilityTrust(false);
     startDaemon(); // Spawn the background helper binary
     createWindow();
