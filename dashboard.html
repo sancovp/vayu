@@ -6,11 +6,13 @@
 <title>Vayu | Dictation Dashboard</title>
 <style>
   :root {
-    --bg-gradient: linear-gradient(135deg, #020617 0%, #0b1528 100%);
-    --panel-bg: rgba(11, 21, 40, 0.55);
-    --border-glow: rgba(0, 240, 255, 0.12);
-    --accent-primary: #00f0ff;       /* Electric Cyan */
-    --accent-secondary: #0072ff;     /* Royal Blue */
+    --bg-gradient: linear-gradient(135deg, #060910 0%, #101826 52%, #071410 100%);
+    --panel-bg: rgba(15, 22, 33, 0.68);
+    --border-glow: rgba(93, 211, 255, 0.16);
+    --accent-primary: #5dd3ff;
+    --accent-secondary: #30dca4;
+    --accent-warm: #f7b955;
+    --accent-rose: #ff7a90;
     --text-main: #f3f4f6;
     --text-muted: #9ca3af;
     --card-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -105,6 +107,113 @@
     gap: 24px;
   }
 
+  .command-strip {
+    display: grid;
+    grid-template-columns: 1.4fr repeat(3, minmax(120px, 0.5fr));
+    gap: 14px;
+  }
+
+  .latest-panel,
+  .pulse-card {
+    background: var(--panel-bg);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+  }
+
+  .latest-panel {
+    min-width: 0;
+    padding: 18px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .panel-kicker,
+  .pulse-label {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .latest-text {
+    min-height: 48px;
+    color: var(--text-main);
+    font-size: 1.05rem;
+    line-height: 1.45;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .latest-meta {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+
+  .panel-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .action-btn,
+  .copy-btn {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text-main);
+    height: 32px;
+    padding: 0 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  }
+
+  .action-btn:hover,
+  .copy-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(93, 211, 255, 0.35);
+    background: rgba(93, 211, 255, 0.1);
+  }
+
+  .action-btn.primary {
+    background: rgba(48, 220, 164, 0.14);
+    border-color: rgba(48, 220, 164, 0.34);
+    color: #bff9e5;
+  }
+
+  .pulse-card {
+    padding: 16px;
+    display: grid;
+    align-content: space-between;
+    min-height: 132px;
+    position: relative;
+    overflow: hidden;
+    border-top: 2px solid var(--accent-primary);
+  }
+
+  .pulse-card:nth-child(3) {
+    border-top-color: var(--accent-warm);
+  }
+
+  .pulse-card:nth-child(4) {
+    border-top-color: var(--accent-rose);
+  }
+
+  .pulse-value {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  .pulse-note {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
   .view-panel {
     display: none;
     flex-direction: column;
@@ -148,7 +257,7 @@
     width: 100%;
     background: rgba(8, 10, 16, 0.4);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 12px 12px 12px 42px;
     color: var(--text-main);
     outline: none;
@@ -158,7 +267,7 @@
 
   .search-input:focus {
     border-color: var(--accent-primary);
-    box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
+    box-shadow: 0 0 12px rgba(93, 211, 255, 0.16);
   }
 
   /* Horizontal Tag Filter Row */
@@ -214,7 +323,7 @@
     background: var(--panel-bg);
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 16px;
+    border-radius: 8px;
     padding: 20px;
     box-shadow: var(--card-shadow);
     transition: all 0.25s ease;
@@ -230,6 +339,18 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 12px;
+  }
+
+  .card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .copy-btn {
+    height: 28px;
+    font-size: 0.76rem;
+    padding: 0 10px;
   }
 
   .card-date {
@@ -253,9 +374,9 @@
   }
 
   .tag-badge {
-    background: rgba(139, 92, 246, 0.12);
-    border: 1px solid rgba(139, 92, 246, 0.2);
-    color: #c084fc;
+    background: rgba(93, 211, 255, 0.1);
+    border: 1px solid rgba(93, 211, 255, 0.2);
+    color: #9fe7ff;
     padding: 4px 10px;
     border-radius: 6px;
     font-size: 0.75rem;
@@ -272,7 +393,7 @@
   .metric-card {
     background: var(--panel-bg);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 16px;
+    border-radius: 8px;
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -304,7 +425,7 @@
   .stats-section-card {
     background: var(--panel-bg);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 16px;
+    border-radius: 8px;
     padding: 24px;
     box-shadow: var(--card-shadow);
     display: flex;
@@ -382,7 +503,7 @@
   .combo-item {
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 10px 14px;
     display: flex;
     justify-content: space-between;
@@ -402,9 +523,9 @@
   }
 
   .combo-count {
-    background: rgba(139, 92, 246, 0.15);
-    border: 1px solid rgba(139, 92, 246, 0.25);
-    color: #c084fc;
+    background: rgba(48, 220, 164, 0.13);
+    border: 1px solid rgba(48, 220, 164, 0.25);
+    color: #bff9e5;
     padding: 4px 10px;
     border-radius: 20px;
     font-size: 0.8rem;
@@ -432,6 +553,33 @@
 </aside>
 
 <main>
+  <section class="command-strip">
+    <div class="latest-panel">
+      <div class="panel-kicker">Latest Capture</div>
+      <div id="latestText" class="latest-text">No dictations yet.</div>
+      <div id="latestMeta" class="latest-meta">Waiting for a local transcript.</div>
+      <div class="panel-actions">
+        <button id="copyLatestBtn" class="action-btn primary">Copy Latest</button>
+        <button id="refreshBtn" class="action-btn">Refresh</button>
+      </div>
+    </div>
+    <div class="pulse-card">
+      <div class="pulse-label">Backups</div>
+      <div id="pulseBackups" class="pulse-value">0</div>
+      <div class="pulse-note">local transcript files</div>
+    </div>
+    <div class="pulse-card">
+      <div class="pulse-label">Today</div>
+      <div id="pulseToday" class="pulse-value">0</div>
+      <div class="pulse-note">captures saved</div>
+    </div>
+    <div class="pulse-card">
+      <div class="pulse-label">Words</div>
+      <div id="pulseWords" class="pulse-value">0</div>
+      <div class="pulse-note">searchable memory</div>
+    </div>
+  </section>
+
   <!-- TAB 1: Transcripts Feed -->
   <div id="panelFeed" class="view-panel active">
     <h2>Dictation Transcripts</h2>
@@ -496,6 +644,7 @@
 
 <script>
   // Core Node.js bindings
+  const { clipboard } = require('electron');
   const db = require('./db.js');
 
   // Elements
@@ -503,6 +652,13 @@
   const navStats = document.getElementById('navStats');
   const panelFeed = document.getElementById('panelFeed');
   const panelStats = document.getElementById('panelStats');
+  const latestText = document.getElementById('latestText');
+  const latestMeta = document.getElementById('latestMeta');
+  const copyLatestBtn = document.getElementById('copyLatestBtn');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const pulseBackups = document.getElementById('pulseBackups');
+  const pulseToday = document.getElementById('pulseToday');
+  const pulseWords = document.getElementById('pulseWords');
   
   const searchInput = document.getElementById('searchInput');
   const tagFilterRow = document.getElementById('tagFilterRow');
@@ -517,6 +673,7 @@
   // Application Data State
   let allTranscripts = [];
   let activeTagFilter = null;
+  let currentFiltered = [];
 
   // 1. Navigation Panel Toggles
   navFeed.addEventListener('click', () => {
@@ -538,8 +695,41 @@
   // 2. Fetch Data & Build UI
   function loadData() {
     allTranscripts = db.getAllTranscripts();
+    renderSummary();
     renderFilters();
     renderFeed();
+  }
+
+  function wordCount(text) {
+    const clean = String(text || '').trim();
+    return clean ? clean.split(/\s+/).length : 0;
+  }
+
+  function formatDate(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString();
+  }
+
+  function renderSummary() {
+    const latest = allTranscripts[0];
+    const todayKey = new Date().toDateString();
+    const todayCount = allTranscripts.filter(t => new Date(t.timestamp).toDateString() === todayKey).length;
+    const totalWords = allTranscripts.reduce((sum, t) => sum + wordCount(t.text), 0);
+
+    pulseBackups.textContent = allTranscripts.length;
+    pulseToday.textContent = todayCount;
+    pulseWords.textContent = totalWords;
+
+    if (!latest) {
+      latestText.textContent = 'No dictations yet.';
+      latestMeta.textContent = 'Waiting for a local transcript.';
+      copyLatestBtn.disabled = true;
+      return;
+    }
+
+    latestText.textContent = latest.text || '';
+    latestMeta.textContent = `${formatDate(latest.timestamp)} · ${wordCount(latest.text)} words`;
+    copyLatestBtn.disabled = false;
   }
 
   function renderFilters() {
@@ -552,7 +742,7 @@
 
     let html = `<div class="filter-tag-badge ${activeTagFilter === null ? 'active' : ''}" onclick="toggleTagFilter(null)">All</div>`;
     sortedTags.forEach(tag => {
-      html += `<div class="filter-tag-badge ${activeTagFilter === tag ? 'active' : ''}" onclick="toggleTagFilter('${tag}')">${tag}</div>`;
+      html += `<div class="filter-tag-badge ${activeTagFilter === tag ? 'active' : ''}" onclick='toggleTagFilter(${JSON.stringify(tag)})'>${escapeHtml(tag)}</div>`;
     });
     tagFilterRow.innerHTML = html;
   }
@@ -567,24 +757,25 @@
     const searchVal = searchInput.value.toLowerCase();
     
     // Filter transcripts
-    const filtered = allTranscripts.filter(t => {
-      const matchSearch = t.text.toLowerCase().includes(searchVal);
+    currentFiltered = allTranscripts.filter(t => {
+      const text = t.text || '';
+      const matchSearch = text.toLowerCase().includes(searchVal);
       const matchTag = activeTagFilter === null || (t.tags && t.tags.includes(activeTagFilter));
       return matchSearch && matchTag;
     });
 
-    if (filtered.length === 0) {
-      feedList.innerHTML = `<div style="text-align:center; padding: 40px; color: var(--text-muted);">No dictations match search filters.</div>`;
+    if (currentFiltered.length === 0) {
+      feedList.innerHTML = `<div style="text-align:center; padding: 40px; color: var(--text-muted);">No matching captures.</div>`;
       return;
     }
 
     let html = "";
-    filtered.forEach(t => {
-      const dateStr = new Date(t.timestamp).toLocaleString();
+    currentFiltered.forEach(t => {
+      const dateStr = formatDate(t.timestamp);
       let tagHtml = "";
       if (t.tags) {
         t.tags.forEach(tag => {
-          tagHtml += `<span class="tag-badge">${tag}</span>`;
+          tagHtml += `<span class="tag-badge">${escapeHtml(tag)}</span>`;
         });
       }
       
@@ -592,6 +783,9 @@
         <div class="transcript-card">
           <div class="card-header">
             <div class="card-date">${dateStr}</div>
+            <div class="card-actions">
+              <button class="copy-btn" data-file="${escapeHtml(t._file || '')}">Copy</button>
+            </div>
           </div>
           <div class="card-text">${escapeHtml(t.text)}</div>
           <div class="card-tags">${tagHtml}</div>
@@ -602,6 +796,39 @@
   }
 
   searchInput.addEventListener('input', renderFeed);
+
+  feedList.addEventListener('click', (event) => {
+    const button = event.target.closest('.copy-btn');
+    if (!button) return;
+
+    const transcript = allTranscripts.find(t => t._file === button.dataset.file);
+    if (!transcript) return;
+
+    clipboard.writeText(transcript.text || '');
+    button.textContent = 'Copied';
+    setTimeout(() => {
+      button.textContent = 'Copy';
+    }, 900);
+  });
+
+  copyLatestBtn.addEventListener('click', () => {
+    const latest = allTranscripts[0];
+    if (!latest) return;
+
+    clipboard.writeText(latest.text || '');
+    copyLatestBtn.textContent = 'Copied';
+    setTimeout(() => {
+      copyLatestBtn.textContent = 'Copy Latest';
+    }, 900);
+  });
+
+  refreshBtn.addEventListener('click', () => {
+    loadData();
+    refreshBtn.textContent = 'Refreshed';
+    setTimeout(() => {
+      refreshBtn.textContent = 'Refresh';
+    }, 900);
+  });
 
   // 3. Stats Calculation Engine
   function calculateStats() {
@@ -684,7 +911,7 @@
 
   // Escape HTML helper
   function escapeHtml(text) {
-    return text
+    return String(text || '')
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
