@@ -1,73 +1,86 @@
 const assert = require('assert');
 
+// Mirrors the accumulator in index.html. Server contract (whisperflow_clone
+// server.py): every message re-transcribes the ENTIRE current segment buffer,
+// so a partial REPLACES the previous partial; is_partial=false closes the
+// segment (server flushes its buffer) and the text is committed.
+
 function normalizeTranscriptText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function findSuffixPrefixOverlap(left, right) {
-  const max = Math.min(left.length, right.length);
-  for (let size = max; size > 0; size--) {
-    if (left.slice(-size).toLowerCase() === right.slice(0, size).toLowerCase()) {
-      return size;
-    }
-  }
-  return 0;
+function joinTranscriptParts(committed, partial) {
+  if (!committed) return partial;
+  if (!partial) return committed;
+  return `${committed} ${partial}`;
 }
 
-function appendTranscriptWithOverlap(existing, incoming) {
-  const current = normalizeTranscriptText(existing);
-  const next = normalizeTranscriptText(incoming);
+function runSequence(messages) {
+  let committedText = '';
+  let currentPartial = '';
+  let transcribedText = '';
 
-  if (!next) return current;
-  if (!current) return next;
-  if (next === current) return current;
-  if (next.startsWith(current)) return next;
-  if (current.endsWith(next)) return current;
-
-  const overlap = findSuffixPrefixOverlap(current, next);
-  const suffix = next.slice(overlap).trim();
-  if (!suffix) return current;
-
-  if (/^[.,!?;:]/.test(suffix)) {
-    return `${current}${suffix}`;
-  }
-
-  return `${current} ${suffix}`;
-}
-
-function runSequence(chunks) {
-  let text = '';
-  let lastIncoming = '';
-
-  for (const chunk of chunks) {
-    const incoming = normalizeTranscriptText(chunk);
+  for (const data of messages) {
+    const incoming = normalizeTranscriptText(data.text);
     if (!incoming) continue;
-    if (lastIncoming && lastIncoming.endsWith(incoming)) continue;
-    text = appendTranscriptWithOverlap(text, incoming);
-    lastIncoming = incoming;
+
+    if (data.is_partial === false) {
+      committedText = joinTranscriptParts(committedText, incoming);
+      currentPartial = '';
+    } else {
+      currentPartial = incoming;
+    }
+
+    transcribedText = joinTranscriptParts(committedText, currentPartial);
   }
 
-  return text;
+  return transcribedText;
 }
 
+// The doubling repro (2026-07-02): Whisper revises the segment prefix as it
+// re-transcribes; only the last hypothesis counts.
 assert.strictEqual(
-  runSequence(['Hello', 'Hello testing', 'testing done.', 'done. works.']),
-  'Hello testing done. works.'
+  runSequence([
+    { is_partial: true, text: 'Help.' },
+    { is_partial: true, text: 'Hello testing.' },
+    { is_partial: true, text: 'Hello testing the new...' },
+    { is_partial: false, text: 'Hello testing the new app.' },
+  ]),
+  'Hello testing the new app.'
 );
 
+// Multi-segment: each final commits, next segment starts fresh.
 assert.strictEqual(
-  runSequence(['The quick brown', 'brown fox jumps', 'jumps over the lazy dog']),
-  'The quick brown fox jumps over the lazy dog'
+  runSequence([
+    { is_partial: true, text: 'Hello' },
+    { is_partial: true, text: 'Hello world.' },
+    { is_partial: false, text: 'Hello world.' },
+    { is_partial: true, text: 'This is' },
+    { is_partial: true, text: 'This is Vayu.' },
+    { is_partial: false, text: 'This is Vayu.' },
+  ]),
+  'Hello world. This is Vayu.'
 );
 
+// Dangling partial at stop time is still included in the paste.
 assert.strictEqual(
-  runSequence(['Testing', 'Testing', 'Testing.']),
+  runSequence([
+    { is_partial: false, text: 'First segment.' },
+    { is_partial: true, text: 'second par' },
+    { is_partial: true, text: 'second part' },
+  ]),
+  'First segment. second part'
+);
+
+// Empty / whitespace-only messages are ignored.
+assert.strictEqual(
+  runSequence([
+    { is_partial: true, text: '  ' },
+    { is_partial: true, text: 'Testing' },
+    { is_partial: false, text: 'Testing.' },
+    { is_partial: true, text: '' },
+  ]),
   'Testing.'
-);
-
-assert.strictEqual(
-  runSequence(['hello', 'lo there', 'there friend']),
-  'hello there friend'
 );
 
 console.log('Transcript accumulator tests passed');

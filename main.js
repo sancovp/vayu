@@ -96,17 +96,22 @@ function createWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
 
+  // Wide bottom strip: the wave spans most of the screen, words ride above it
+  const overlayWidth = Math.min(1000, width - 80);
+  const overlayHeight = 384;
+
   mainWindow = new BrowserWindow({
-    width: 400,
-    height: 180,
-    x: Math.floor((width - 400) / 2),
-    y: height - 200, // Position near the bottom above the Dock
+    width: overlayWidth,
+    height: overlayHeight,
+    x: Math.floor((width - overlayWidth) / 2),
+    y: height - overlayHeight - 8, // Position near the bottom above the Dock
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
     show: false, // Start hidden, shown via IPC/event
+    acceptFirstMouse: true, // Let the Open Vayu tab respond on the first click even while unfocused
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -143,6 +148,9 @@ function createWindow() {
     appendRuntimeLog('ipc show-window');
     if (mainWindow) {
       mainWindow.showInactive(); // Show without stealing keyboard/active app focus
+      // Overlay is interactive while visible so the Open Vayu tab is clickable;
+      // the renderer's mouseleave handler restores click-through when the cursor exits.
+      mainWindow.setIgnoreMouseEvents(false);
     }
   });
 
@@ -150,6 +158,10 @@ function createWindow() {
     appendRuntimeLog('ipc hide-window');
     if (mainWindow) {
       mainWindow.hide();
+      // Restore click-through unconditionally: hiding while hovered means the
+      // renderer's mouseleave never fires, which would leave a hidden window
+      // eating clicks the next time it shows.
+      mainWindow.setIgnoreMouseEvents(true, { forward: true });
     }
   });
 
@@ -165,18 +177,30 @@ function createWindow() {
   });
 }
 
+function bringDashboardToFront() {
+  if (!dashboardWindow) return;
+  if (dashboardWindow.isMinimized()) dashboardWindow.restore();
+  dashboardWindow.show();
+  dashboardWindow.moveTop();
+  dashboardWindow.focus();
+  // The overlay is shown inactive, so Vayu is not the active app when the
+  // pill is clicked — without stealing focus the dashboard opens BEHIND the
+  // current app and looks like nothing happened.
+  app.focus({ steal: true });
+}
+
 function createDashboardWindow() {
   appendRuntimeLog('createDashboardWindow called');
   if (dashboardWindow) {
-    dashboardWindow.focus();
+    bringDashboardToFront();
     return;
   }
 
   dashboardWindow = new BrowserWindow({
-    width: 950,
-    height: 650,
-    title: "Vayu Dashboard",
-    backgroundColor: "#080a10",
+    width: 1180,
+    height: 760,
+    title: "Vayu",
+    backgroundColor: "#dbeefb",
     show: true,
     webPreferences: {
       nodeIntegration: true,
@@ -185,6 +209,10 @@ function createDashboardWindow() {
   });
 
   dashboardWindow.loadFile(path.join(__dirname, 'dashboard.html'));
+
+  dashboardWindow.once('ready-to-show', () => {
+    bringDashboardToFront();
+  });
 
   dashboardWindow.on('closed', () => {
     dashboardWindow = null;
@@ -445,6 +473,81 @@ ipcMain.on('open-dashboard', () => {
   createDashboardWindow();
 });
 
+// ===== Automations + CAVE link (Vayu classifies, CAVE automates) =====
+const { VayuAutomations } = require('./vayu_automations.js');
+const { CaveLink } = require('./cave_link.js');
+
+let automations = null;
+let caveLink = null;
+
+function initAutomations() {
+  automations = new VayuAutomations({
+    dataDir: DATA_DIR,
+    log: appendRuntimeLog,
+    actions: { open_dashboard: () => createDashboardWindow() },
+    caveLink: null,
+  }).init();
+
+  const caveCfg = automations.config.cave || {};
+  caveLink = new CaveLink({
+    baseUrl: caveCfg.base_url,
+    enabled: caveCfg.enabled,
+    log: appendRuntimeLog,
+    onEvent: (payload) => {
+      // SEAM-CONTRACT C5 (Lane 1): CAVE's SSE producer (cave/core/mixins/sse.py:22)
+      // emits {type, data, timestamp}. Read `type`, NOT `event_type` — the
+      // contract forbids propagating `event_type` into any new surface (that
+      // field is a Conductor-lane-only artifact). Demux key = data.agent.
+      const etype = payload && payload.type;
+      if (etype) appendRuntimeLog(`cave event ${etype}`);
+      for (const win of [mainWindow, dashboardWindow]) {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('cave-event', payload);
+        }
+      }
+    },
+  }).start();
+  automations.caveLink = caveLink;
+
+  // Best-effort periodic refresh of CAVE's live agent registry — supplementary
+  // to the yaml contacts list, not required for it to work.
+  setInterval(() => automations.refreshLiveAgents().catch(() => {}), 60000);
+}
+
+// Settings UI (dashboard) reads/edits the same automations.yaml this classifier
+// uses — one file, agent-editable and human-editable, always in sync.
+ipcMain.handle('vayu-automations-get', () => {
+  if (!automations) return { routes: [], contacts: {} };
+  return { routes: automations.getRoutes(), contacts: automations.getContacts() };
+});
+
+ipcMain.handle('vayu-automations-add-alias', (event, data) => {
+  if (!automations) return { ok: false, error: 'automations not initialized' };
+  const { canonical, alias } = data || {};
+  return automations.addContactAlias(canonical, alias);
+});
+
+// Full utterance at paste time — the renderer awaits the verdict:
+// consumed=true means it was a command, so the renderer must not paste it.
+ipcMain.handle('vayu-utterance', async (event, data) => {
+  if (!automations) return { consumed: false };
+  try {
+    return await automations.handle((data && data.kind) || 'paste', (data && data.text) || '');
+  } catch (e) {
+    appendRuntimeLog(`vayu-utterance handler failed ${e.message}`);
+    return { consumed: false };
+  }
+});
+
+// Per-segment finals while still dictating — fire-and-forget live triggers.
+ipcMain.on('vayu-utterance-final', (event, data) => {
+  if (automations) {
+    automations.handle('final', (data && data.text) || '').catch(e => {
+      appendRuntimeLog(`final trigger failed ${e.message}`);
+    });
+  }
+});
+
 ipcMain.handle('check-accessibility-trust', (event, prompt) => {
   return checkAccessibilityTrust(Boolean(prompt));
 });
@@ -525,6 +628,7 @@ if (!gotTheLock) {
     const accessibilityTrusted = checkAccessibilityTrust(false);
     startDaemon(); // Spawn the background helper binary
     createWindow();
+    initAutomations();
     if (!accessibilityTrusted) {
       createPermissionWindow();
     }

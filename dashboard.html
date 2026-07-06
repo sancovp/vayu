@@ -3,1180 +3,1018 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vayu | Dictation Dashboard</title>
+<title>Vayu</title>
 <style>
   :root {
-    --bg-gradient: linear-gradient(135deg, #dff4ff 0%, #f7fbff 48%, #e8f8ef 100%);
-    --panel-bg: rgba(255, 255, 255, 0.68);
-    --panel-strong: rgba(255, 255, 255, 0.82);
-    --ink: #43526a;
-    --ink-strong: #26364f;
-    --text-main: #34435a;
-    --text-muted: #7b8ca3;
-    --accent-primary: #58b8f6;
-    --accent-secondary: #49c88f;
-    --accent-warm: #f5b84b;
-    --accent-rose: #ee7a8d;
-    --play-blue: #3c79cf;
-    --play-green: #a9cd3c;
-    --line-soft: rgba(95, 124, 158, 0.2);
-    --card-shadow: 0 18px 48px rgba(72, 105, 134, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+    --ink: #3a4a60;
+    --ink-strong: #24344c;
+    --ink-soft: #7b8ca3;
+    --sky-accent: #58b8f6;
+    --glass: rgba(255, 255, 255, 0.12);
+    --glass-strong: rgba(255, 255, 255, 0.21);
+    --glass-border: rgba(255, 255, 255, 0.28);
+    --card-shadow: 0 24px 70px rgba(70, 110, 150, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  
+
+  html, body { height: 100%; }
+
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg-gradient);
-    background-image:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(225, 243, 255, 0.34)),
-      url("assets/vayu-floating-islands.png");
-    background-size: cover;
-    background-position: center;
-    color: var(--text-main);
-    height: 100vh;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(214, 238, 252, 0.25)),
+      linear-gradient(180deg, #dbeefb 0%, #eaf6ff 60%, #dff0f7 100%);
+    color: var(--ink);
     overflow: hidden;
-    display: flex;
     position: relative;
   }
 
-  .ambient-canvas {
+  #bg-video {
     position: fixed;
     inset: 0;
-    width: 100vw;
-    height: 100vh;
-    pointer-events: none;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
     z-index: 0;
   }
 
-  /* Sidebar styling */
-  aside {
-    width: 230px;
-    background: rgba(255, 255, 255, 0.45);
-    border-right: 1px solid rgba(255, 255, 255, 0.62);
-    backdrop-filter: blur(24px);
-    display: flex;
-    flex-direction: column;
-    padding: 24px;
-    z-index: 2;
-    contain: layout paint style;
-  }
-
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 36px;
-  }
-
-  .brand svg {
-    width: 24px;
-    height: 24px;
-    fill: var(--accent-primary);
-  }
-
-  .brand-name {
-    font-size: 1.35rem;
-    font-weight: 800;
-    letter-spacing: 2px;
-    background: linear-gradient(135deg, #50627d 20%, #58b8f6 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .nav-btn {
-    background: rgba(255, 255, 255, 0.38);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    color: var(--text-muted);
-    padding: 12px 16px;
-    border-radius: 8px;
-    text-align: left;
-    font-size: 0.95rem;
-    font-weight: 800;
-    cursor: pointer;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    box-shadow: 0 8px 18px rgba(72, 105, 134, 0.1);
-    transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
-  }
-
-  .nav-btn:hover {
-    background: rgba(255, 255, 255, 0.72);
-    color: var(--ink-strong);
-    transform: translateX(2px);
-  }
-
-  .nav-btn.active {
-    background: var(--play-blue);
-    color: #ffffff;
-    border-color: rgba(255, 255, 255, 0.52);
-    box-shadow: 0 12px 22px rgba(60, 121, 207, 0.28), inset 0 -3px 0 rgba(40, 86, 156, 0.35);
-  }
-
-  .nav-btn svg {
-    width: 18px;
-    height: 18px;
-    fill: currentColor;
-  }
-
-  /* Main Workspace Container */
-  main {
-    flex: 1;
-    padding: 28px 32px 36px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-    position: relative;
+  /* ===================== drifting clouds ===================== */
+  .cloud {
+    position: fixed;
+    border-radius: 999px;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 70%);
+    filter: blur(6px);
+    pointer-events: none;
     z-index: 1;
+    animation: cloud-drift var(--dur, 90s) linear var(--delay, 0s) infinite;
   }
 
-  .sky-hero {
-    min-height: 310px;
-    display: grid;
-    grid-template-columns: minmax(360px, 0.92fr) minmax(260px, 0.58fr);
-    gap: 24px;
-    align-items: center;
+  @keyframes cloud-drift {
+    from { transform: translateX(110vw); }
+    to   { transform: translateX(-40vw); }
   }
 
-  .hero-console {
-    min-width: 0;
-    padding: 34px 38px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.64);
-    border: 1px solid rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(22px);
-    box-shadow: var(--card-shadow);
-    display: grid;
-    gap: 22px;
-    contain: layout paint style;
-    isolation: isolate;
-  }
-
-  .hero-brand {
+  /* ===================== top-right orbs ===================== */
+  #orb-row {
+    position: fixed;
+    top: 22px;
+    right: 26px;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 18px;
-  }
-
-  .hero-brand img {
-    width: 58px;
-    height: 58px;
-    object-fit: contain;
-  }
-
-  .hero-title {
-    color: #5f6f86;
-    font-size: clamp(2rem, 4vw, 3.05rem);
-    font-weight: 300;
-    letter-spacing: 0.28em;
-  }
-
-  .hero-search {
-    position: relative;
-  }
-
-  .hero-search svg {
-    position: absolute;
-    left: 24px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 28px;
-    height: 28px;
-    fill: #637894;
-  }
-
-  .hero-search .search-input {
-    height: 70px;
-    padding-left: 72px;
-    padding-right: 24px;
-    font-size: 1.25rem;
-    font-weight: 650;
-    color: var(--ink-strong);
-    background: rgba(255, 255, 255, 0.66);
-    border-color: rgba(90, 118, 150, 0.18);
-    box-shadow: inset 0 2px 6px rgba(90, 118, 150, 0.08), 0 12px 24px rgba(72, 105, 134, 0.1);
-  }
-
-  .hero-subcopy {
-    text-align: center;
-    color: #71849c;
-    font-size: 1.02rem;
-    font-weight: 650;
-  }
-
-  .hero-actions {
-    display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
     gap: 12px;
+    z-index: 40;
   }
 
-  .hero-button {
-    border: 1px solid rgba(255, 255, 255, 0.58);
-    border-radius: 8px;
-    min-width: 150px;
-    height: 50px;
-    padding: 0 18px;
-    background: rgba(255, 255, 255, 0.46);
-    color: #5f7189;
-    font-size: 0.95rem;
-    font-weight: 800;
+  .orb {
+    width: 46px;
+    height: 46px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-strong);
+    backdrop-filter: blur(6px) saturate(120%);
+    box-shadow: 0 10px 26px rgba(70, 110, 150, 0.22);
     cursor: pointer;
-    box-shadow: 0 12px 22px rgba(72, 105, 134, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
   }
 
-  .hero-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 16px 26px rgba(72, 105, 134, 0.16);
+  .orb:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 14px 34px rgba(70, 110, 150, 0.3); }
+  .orb svg { width: 20px; height: 20px; fill: var(--ink); opacity: 0.75; }
+
+  /* ===================== zen hero card ===================== */
+  #zen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    z-index: 10;
+    transform: translateY(-11vh);
+    transition: opacity 0.4s ease, transform 0.4s ease;
   }
 
-  .hero-button.primary {
-    background: var(--play-green);
-    color: #ffffff;
-    box-shadow: 0 13px 24px rgba(121, 151, 38, 0.24), inset 0 -4px 0 rgba(91, 121, 21, 0.24);
+  body[data-mode="history"] #zen,
+  body[data-mode="settings"] #zen,
+  body[data-mode="automations"] #zen {
+    opacity: 0;
+    transform: scale(0.97);
+    pointer-events: none;
   }
 
-  .quest-panel {
-    align-self: stretch;
-    padding: 24px;
-    border-radius: 8px;
-    border: 2px solid rgba(126, 170, 54, 0.55);
-    background: rgba(18, 42, 78, 0.66);
-    color: #ffffff;
-    backdrop-filter: blur(18px);
-    box-shadow: 0 20px 42px rgba(21, 55, 93, 0.22);
-    display: grid;
-    gap: 18px;
-    contain: layout paint style;
-    isolation: isolate;
-  }
-
-  .quest-title {
-    color: #eff7ff;
-    font-size: 1.15rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    border-bottom: 2px dashed rgba(169, 205, 60, 0.72);
-    padding-bottom: 12px;
-  }
-
-  .quest-row {
-    display: grid;
-    grid-template-columns: 74px 1fr;
-    gap: 14px;
+  #hero-card {
+    width: min(660px, calc(100vw - 80px));
+    padding: 44px 52px 40px;
+    border-radius: 28px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass);
+    backdrop-filter: blur(8px) saturate(120%);
+    box-shadow: var(--card-shadow);
+    display: flex;
+    flex-direction: column;
     align-items: center;
   }
 
-  .quest-number {
-    font-size: 2.05rem;
-    font-weight: 900;
-    color: #ffffff;
-  }
-
-  .quest-label {
-    color: #c8ee6a;
-    font-size: 0.78rem;
-    font-weight: 900;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-
-  .fable-dock {
-    align-self: center;
+  #hero-brand {
     display: flex;
-    align-items: end;
-    gap: 9px;
-    min-height: 72px;
-    padding: 9px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.72);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.48);
-    backdrop-filter: blur(18px);
-    box-shadow: 0 16px 34px rgba(72, 105, 134, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.76);
-    contain: layout paint style;
-    isolation: isolate;
+    align-items: center;
+    justify-content: center;
   }
 
-  .dock-button {
-    --size: 48px;
-    width: var(--size);
-    height: var(--size);
-    border: 1px solid rgba(255, 255, 255, 0.74);
-    border-radius: 8px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(221, 237, 249, 0.7));
-    color: #57718f;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    box-shadow: 0 10px 18px rgba(72, 105, 134, 0.14), inset 0 -3px 0 rgba(70, 111, 152, 0.08);
-    transition: width 0.08s ease, height 0.08s ease, transform 0.14s ease, color 0.14s ease;
+  #hero-brand img {
+    width: min(480px, 62vw);
+    height: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 10px 26px rgba(40, 110, 170, 0.4));
   }
 
-  .dock-button:hover,
-  .dock-button:focus-visible {
-    color: #2f6fbf;
-    transform: translateY(-4px);
-    outline: none;
-  }
-
-  .dock-button svg {
-    width: 54%;
-    height: 54%;
-    fill: currentColor;
-  }
-
-  .command-strip {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .latest-panel,
-  .pulse-card {
-    background: var(--panel-bg);
-    border: 1px solid rgba(255, 255, 255, 0.64);
-    border-radius: 8px;
-    backdrop-filter: blur(18px);
-    box-shadow: var(--card-shadow);
-    contain: layout paint style;
-    isolation: isolate;
-  }
-
-  .latest-panel {
-    min-width: 0;
-    padding: 18px;
-    display: grid;
+  #hero-search {
+    width: 100%;
+    display: flex;
+    align-items: center;
     gap: 12px;
+    height: 58px;
+    padding: 0 12px 0 20px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 2px 6px rgba(90, 130, 170, 0.08), 0 8px 24px rgba(70, 110, 150, 0.12);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
   }
 
-  .panel-kicker,
-  .pulse-label {
-    color: #6f8199;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  #hero-search:focus-within {
+    border-color: rgba(88, 184, 246, 0.7);
+    box-shadow: inset 0 2px 6px rgba(90, 130, 170, 0.08), 0 8px 30px rgba(88, 184, 246, 0.28);
   }
 
-  .latest-text {
-    min-height: 48px;
-    color: var(--text-main);
-    font-size: 1.05rem;
-    line-height: 1.45;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
+  #hero-search svg { width: 20px; height: 20px; fill: var(--ink-soft); flex-shrink: 0; }
 
-  .latest-meta {
-    color: var(--text-muted);
-    font-size: 0.82rem;
-  }
-
-  .panel-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .action-btn,
-  .copy-btn {
-    border: 1px solid rgba(73, 109, 147, 0.14);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.58);
-    color: #526780;
-    height: 32px;
-    padding: 0 12px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
-  }
-
-  .action-btn:hover,
-  .copy-btn:hover {
-    transform: translateY(-1px);
-    border-color: rgba(60, 121, 207, 0.25);
-    background: rgba(255, 255, 255, 0.82);
-  }
-
-  .action-btn.primary {
-    background: var(--play-blue);
-    border-color: rgba(255, 255, 255, 0.54);
-    color: #ffffff;
-    box-shadow: inset 0 -3px 0 rgba(40, 86, 156, 0.3);
-  }
-
-  .pulse-card {
-    padding: 16px;
-    display: grid;
-    align-content: space-between;
-    min-height: 132px;
-    position: relative;
-    overflow: hidden;
-    border-top: 2px solid var(--accent-primary);
-  }
-
-  .pulse-card:nth-child(3) {
-    border-top-color: var(--accent-warm);
-  }
-
-  .pulse-card:nth-child(4) {
-    border-top-color: var(--accent-rose);
-  }
-
-  .pulse-value {
-    font-size: 2rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-  }
-
-  .pulse-note {
-    color: var(--text-muted);
-    font-size: 0.8rem;
-  }
-
-  .view-panel {
-    display: none;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .view-panel.active {
-    display: flex;
-  }
-
-  h2 {
-    font-size: 1.6rem;
-    font-weight: 700;
-    letter-spacing: -0.5px;
+  #searchInput {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 17px;
     color: var(--ink-strong);
   }
 
-  /* Search & Filter Bar */
-  .search-row {
+  #searchInput::placeholder { color: var(--ink-soft); }
+
+  #kbd-chip {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  #kbd-chip span {
+    padding: 5px 9px;
+    border-radius: 8px;
+    border: 1px solid rgba(150, 175, 200, 0.4);
+    background: rgba(255, 255, 255, 0.8);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+
+  #hero-hint {
+    margin-top: 20px;
+    font-size: 15px;
+    color: #5d7186;
+  }
+
+  #hero-actions {
     display: flex;
     gap: 16px;
+    margin-top: 26px;
+  }
+
+  .hero-pill {
+    display: inline-flex;
     align-items: center;
-    width: 100%;
-  }
-
-  .search-input-wrapper {
-    position: relative;
-    flex: 1;
-  }
-
-  .search-input-wrapper svg {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 16px;
-    height: 16px;
-    fill: var(--text-muted);
-  }
-
-  .search-input {
-    width: 100%;
-    background: rgba(255, 255, 255, 0.62);
-    border: 1px solid var(--line-soft);
-    border-radius: 8px;
-    padding: 12px 12px 12px 42px;
+    gap: 9px;
+    height: 46px;
+    padding: 0 24px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.66);
+    box-shadow: 0 8px 22px rgba(70, 110, 150, 0.16);
+    font-size: 14.5px;
+    font-weight: 650;
     color: var(--ink-strong);
-    outline: none;
-    font-size: 0.95rem;
-    transition: all 0.2s ease;
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
   }
 
-  .search-input:focus {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 12px rgba(93, 211, 255, 0.16);
+  .hero-pill:hover {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 12px 30px rgba(70, 110, 150, 0.24);
   }
 
-  /* Horizontal Tag Filter Row */
-  .tag-filters {
+  .hero-pill svg { width: 17px; height: 17px; fill: var(--ink); opacity: 0.7; }
+
+  #zen-stats {
+    margin-top: 24px;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(93, 113, 134, 0.65);
+  }
+
+  /* ===================== the wisprflow ribbon ===================== */
+  #ribbon-stage {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 34vh;
+    z-index: 20;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+
+  body[data-mode="history"] #ribbon-stage,
+  body[data-mode="settings"] #ribbon-stage,
+  body[data-mode="automations"] #ribbon-stage { opacity: 0; }
+
+  /* The svg is an INVISIBLE full-width rect — it must NEVER take clicks
+     itself (at z-index 20 it sits over the hero card's buttons; an auto
+     rect here made every button-click copy-to-clipboard). Only the PAINTED
+     ribbon (band + text) is clickable, and only in zen mode; clicks bubble
+     up to the svg's copy handler. */
+  #ribbon-svg { width: 100%; height: 100%; pointer-events: none; }
+
+  body[data-mode="zen"] #ribbon-band,
+  body[data-mode="zen"] #ribbon-text {
+    pointer-events: visiblePainted;
+    cursor: pointer;
+  }
+
+  #ribbon-band {
+    fill: rgba(255, 255, 255, 0.34);
+    stroke: rgba(255, 255, 255, 0.65);
+    stroke-width: 1;
+    filter: drop-shadow(0 10px 24px rgba(70, 110, 150, 0.18));
+  }
+
+  #ribbon-text {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 21px;
+    font-weight: 650;
+    fill: #33465c;
+    letter-spacing: 0.02em;
+  }
+
+  #ribbon-copied {
+    position: fixed;
+    bottom: 26vh;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 10px 26px rgba(70, 110, 150, 0.25);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-strong);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 30;
+  }
+
+  #ribbon-copied.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ===================== glass sheets (history / settings) ===================== */
+  .sheet {
+    position: fixed;
+    inset: 34px;
+    z-index: 50;
+    border-radius: 26px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px) saturate(120%);
+    box-shadow: var(--card-shadow);
     display: flex;
+    flex-direction: column;
+    padding: 28px 34px;
+    opacity: 0;
+    transform: translateY(26px) scale(0.985);
+    pointer-events: none;
+    transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  body[data-mode="history"] #history-sheet,
+  body[data-mode="settings"] #settings-sheet,
+  body[data-mode="automations"] #automations-sheet {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .sheet-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .sheet-title {
+    font-size: 21px;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    color: #4c6076;
+  }
+
+  .sheet-close {
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.75);
+    color: var(--ink);
+    font-size: 15px;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+  }
+
+  .sheet-close:hover { transform: scale(1.08); }
+
+  .sheet-tabs { display: flex; gap: 8px; }
+
+  .sheet-tab {
+    height: 34px;
+    padding: 0 18px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.16s ease;
+  }
+
+  .sheet-tab.active {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: var(--glass-border);
+    color: var(--ink-strong);
+    box-shadow: 0 6px 16px rgba(70, 110, 150, 0.14);
+  }
+
+  .sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  .subview { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .subview.active { display: flex; }
+
+  /* --- history: filters + feed --- */
+  #tagFilterRow {
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    scrollbar-width: thin;
-  }
-
-  .tag-filters::-webkit-scrollbar {
-    height: 4px;
-  }
-
-  .tag-filters::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 2px;
+    margin-bottom: 14px;
   }
 
   .filter-tag-badge {
-    background: rgba(255, 255, 255, 0.56);
-    border: 1px solid rgba(255, 255, 255, 0.66);
-    color: var(--text-muted);
-    padding: 6px 12px;
-    border-radius: 100px;
-    font-size: 0.8rem;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(150, 175, 200, 0.35);
+    background: rgba(255, 255, 255, 0.55);
+    font-size: 12.5px;
     font-weight: 600;
+    color: var(--ink-soft);
     cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
   }
 
-  .filter-tag-badge:hover {
-    background: rgba(255, 255, 255, 0.82);
-    color: var(--ink-strong);
-  }
+  .filter-tag-badge:hover { background: rgba(255, 255, 255, 0.85); }
 
   .filter-tag-badge.active {
-    background: var(--play-blue);
-    border-color: rgba(255, 255, 255, 0.72);
+    background: var(--sky-accent);
+    border-color: var(--sky-accent);
     color: #ffffff;
+    box-shadow: 0 6px 16px rgba(88, 184, 246, 0.4);
   }
 
-  /* Transcripts List/Feed */
-  .feed-container {
+  #feedList {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+    padding-right: 6px;
   }
+
+  #feedList::-webkit-scrollbar { width: 8px; }
+  #feedList::-webkit-scrollbar-thumb { background: rgba(120, 150, 180, 0.3); border-radius: 999px; }
 
   .transcript-card {
-    background: var(--panel-bg);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.66);
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: var(--card-shadow);
-    transition: all 0.25s ease;
-    contain: layout paint style;
-    isolation: isolate;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.66);
+    padding: 16px 20px;
+    box-shadow: 0 8px 22px rgba(70, 110, 150, 0.1);
   }
 
-  .transcript-card:hover {
-    border-color: rgba(60, 121, 207, 0.25);
-    transform: translateY(-2px);
-  }
-
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-
-  .card-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  .card-header { display: flex; align-items: center; margin-bottom: 8px; }
+  .card-date { font-size: 12px; font-weight: 650; color: var(--ink-soft); }
+  .card-actions { margin-left: auto; }
 
   .copy-btn {
     height: 28px;
-    font-size: 0.76rem;
-    padding: 0 10px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(88, 184, 246, 0.45);
+    background: rgba(88, 184, 246, 0.12);
+    font-size: 12px;
+    font-weight: 700;
+    color: #2e7cb8;
+    cursor: pointer;
+    transition: all 0.15s ease;
   }
 
-  .card-date {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
+  .copy-btn:hover { background: rgba(88, 184, 246, 0.28); }
 
-  .card-text {
-    font-size: 1.05rem;
-    line-height: 1.5;
-    color: var(--text-main);
-    margin-bottom: 14px;
-    word-wrap: break-word;
-  }
+  .card-text { font-size: 14.5px; line-height: 1.55; color: var(--ink-strong); }
 
-  .card-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
+  .card-tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
 
   .tag-badge {
-    background: rgba(60, 121, 207, 0.1);
-    border: 1px solid rgba(60, 121, 207, 0.2);
-    color: #2f6fbf;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 600;
+    padding: 3px 11px;
+    border-radius: 999px;
+    background: rgba(88, 184, 246, 0.14);
+    border: 1px solid rgba(88, 184, 246, 0.3);
+    font-size: 11px;
+    font-weight: 650;
+    color: #2e7cb8;
   }
 
-  /* Metrics Grid */
+  /* --- insights --- */
   .metrics-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
+    gap: 14px;
+    margin-bottom: 18px;
   }
 
   .metric-card {
-    background: var(--panel-bg);
-    border: 1px solid rgba(255, 255, 255, 0.66);
-    border-radius: 8px;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    box-shadow: var(--card-shadow);
-    contain: layout paint style;
-    isolation: isolate;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.66);
+    padding: 16px 20px;
+    text-align: center;
   }
 
-  .metric-label {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
+  .metric-label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+  .metric-value { font-size: 30px; font-weight: 300; color: var(--ink-strong); margin-top: 4px; }
 
-  .metric-value {
-    font-size: 2.2rem;
-    font-weight: 700;
-    color: var(--text-main);
-  }
-
-  /* Stats Visualizer Layout */
   .stats-split {
+    flex: 1;
+    min-height: 0;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 24px;
+    gap: 14px;
   }
 
   .stats-section-card {
-    background: var(--panel-bg);
-    border: 1px solid rgba(255, 255, 255, 0.66);
-    border-radius: 8px;
-    padding: 24px;
-    box-shadow: var(--card-shadow);
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.66);
+    padding: 18px 20px;
+    overflow-y: auto;
+  }
+
+  .stats-section-title { font-size: 13px; font-weight: 750; color: var(--ink-strong); margin-bottom: 12px; }
+
+  .chart-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .chart-label { width: 110px; font-size: 12.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chart-bar-bg { flex: 1; height: 10px; border-radius: 999px; background: rgba(120, 150, 180, 0.18); overflow: hidden; }
+  .chart-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #58b8f6, #49c88f); }
+  .chart-count { width: 30px; text-align: right; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+
+  .combo-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(120, 150, 180, 0.14); }
+  .combo-pair { display: flex; align-items: center; gap: 6px; }
+  .combo-plus { font-weight: 700; color: var(--ink-soft); }
+  .combo-count { font-size: 12px; font-weight: 650; color: var(--ink-soft); }
+
+  /* --- settings --- */
+  .settings-list { display: flex; flex-direction: column; gap: 14px; max-width: 620px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 10px; }
+  .settings-list::-webkit-scrollbar { width: 8px; }
+  .settings-list::-webkit-scrollbar-thumb { background: rgba(120, 150, 180, 0.35); border-radius: 999px; }
+
+  .setting-row {
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.66);
+    padding: 16px 20px;
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 16px;
-    contain: layout paint style;
-    isolation: isolate;
   }
 
-  .stats-section-title {
-    font-size: 1.1rem;
+  .setting-info { flex: 1; min-width: 0; }
+  .setting-name { font-size: 14px; font-weight: 700; color: var(--ink-strong); }
+  .setting-detail { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; word-break: break-all; }
+
+  .setting-action {
+    height: 32px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(88, 184, 246, 0.45);
+    background: rgba(88, 184, 246, 0.12);
+    font-size: 12.5px;
     font-weight: 700;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    padding-bottom: 10px;
-  }
-
-  /* Custom Bar Chart */
-  .chart-container {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    max-height: 300px;
-    overflow-y: auto;
-    padding-right: 6px;
-  }
-
-  .chart-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .chart-label {
-    width: 90px;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    font-weight: 600;
+    color: #2e7cb8;
+    cursor: pointer;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    transition: all 0.15s ease;
   }
 
-  .chart-bar-bg {
-    flex: 1;
-    height: 8px;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 4px;
-    overflow: hidden;
-  }
+  .setting-action:hover { background: rgba(88, 184, 246, 0.28); }
 
-  .chart-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
-    border-radius: 4px;
-    width: 0%;
-    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-  }
+  .setting-row.column { flex-direction: column; align-items: stretch; }
 
-  .chart-count {
-    width: 30px;
-    font-size: 0.85rem;
-    color: var(--text-main);
+  .automation-route {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0;
+    border-bottom: 1px solid rgba(120, 150, 180, 0.14); font-size: 12.5px;
+  }
+  .automation-route:last-child { border-bottom: none; }
+  .automation-route .route-name { font-weight: 700; color: var(--ink-strong); min-width: 130px; }
+  .automation-route .route-match { flex: 1; min-width: 0; color: var(--ink-soft); font-family: ui-monospace, monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .automation-route .route-action { padding: 2px 10px; border-radius: 999px; background: rgba(88, 184, 246, 0.15); color: #2e7cb8; font-weight: 700; font-size: 10.5px; white-space: nowrap; }
+
+  .contact-block { margin-bottom: 10px; }
+  .contact-name { font-weight: 700; font-size: 12.5px; color: var(--ink-strong); margin-bottom: 4px; }
+  .contact-aliases { display: flex; flex-wrap: wrap; gap: 6px; }
+  .alias-chip { padding: 3px 10px; border-radius: 999px; background: rgba(120, 150, 180, 0.14); color: var(--ink); font-size: 11.5px; }
+
+  .automation-input {
+    height: 34px; padding: 0 12px; border-radius: 10px;
+    border: 1px solid rgba(120, 150, 180, 0.3); background: rgba(255, 255, 255, 0.8);
+    font-size: 12.5px; color: var(--ink-strong); outline: none;
+  }
+  .automation-input:focus { border-color: rgba(88, 184, 246, 0.7); }
+
+  kbd {
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(150, 175, 200, 0.4);
+    background: rgba(255, 255, 255, 0.8);
+    font-family: inherit;
+    font-size: 12px;
     font-weight: 700;
-    text-align: right;
-  }
-
-  /* Tag Combination Matrix list */
-  .combo-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-height: 300px;
-    overflow-y: auto;
-    padding-right: 6px;
-  }
-
-  .combo-item {
-    background: rgba(255, 255, 255, 0.52);
-    border: 1px solid rgba(255, 255, 255, 0.62);
-    border-radius: 8px;
-    padding: 10px 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .combo-pair {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .combo-plus {
-    color: var(--text-muted);
-    font-weight: 700;
-    font-size: 0.85rem;
-  }
-
-  .combo-count {
-    background: rgba(48, 220, 164, 0.18);
-    border: 1px solid rgba(48, 220, 164, 0.25);
-    color: #bff9e5;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 700;
-  }
-
-  @media (max-width: 980px) {
-    body {
-      overflow: auto;
-      min-height: 100vh;
-    }
-
-    aside {
-      display: none;
-    }
-
-    main {
-      overflow: visible;
-    }
-
-    .sky-hero,
-    .command-strip,
-    .stats-split {
-      grid-template-columns: 1fr;
-    }
-
-    .metrics-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .fable-dock {
-      position: sticky;
-      bottom: 12px;
-    }
+    color: var(--ink);
   }
 </style>
 </head>
-<body>
-<canvas id="ambientCanvas" class="ambient-canvas" aria-hidden="true"></canvas>
+<body data-mode="zen">
 
-<aside>
-  <div class="brand">
-    <img src="assets/vayu_transparent.png" alt="Vayu Logo" style="width: 28px; height: 28px; object-fit: contain;">
-    <div class="brand-name">VAYU</div>
-  </div>
-  
-  <button id="navFeed" class="nav-btn active">
-    <svg viewBox="0 0 24 24"><path d="M4 14h6v-4H4v4zm0 5h6v-4H4v4zM4 9h6V5H4v4zm10 10h6v-4h-6v4zm0-9v4h6v-4h-6zm0-5v4h6V5h-6z"/></svg>
-    Transcripts Feed
+<video id="bg-video" autoplay loop muted playsinline>
+  <source src="assets/vayu-bg.mp4" type="video/mp4">
+</video>
+
+<span class="cloud" style="top: 8%;  left: 0; width: 340px; height: 60px; --dur: 110s; --delay: -20s;"></span>
+<span class="cloud" style="top: 30%; left: 0; width: 260px; height: 46px; --dur: 140s; --delay: -70s;"></span>
+<span class="cloud" style="top: 64%; left: 0; width: 400px; height: 70px; --dur: 95s;  --delay: -45s;"></span>
+
+<div id="orb-row">
+  <button class="orb" id="orbHistory" title="History" aria-label="History">
+    <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 1-8.54 6.15l1.9.62A7 7 0 1 0 13 5V3zm-1 3h2v6.1l4 2.3-1 1.73-5-2.88V6zM4.6 3.4 8 6.8 3.4 8.2l1.2-4.8z"/></svg>
   </button>
-  
-  <button id="navStats" class="nav-btn">
-    <svg viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
-    Tag Statistics
+  <button class="orb" id="orbAutomations" title="Automations" aria-label="Automations">
+    <svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
   </button>
-</aside>
+  <button class="orb" id="orbSettings" title="Settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.05 7.05 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.63 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.61.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54a7.05 7.05 0 0 0 1.63-.94l2.39.96c.22.09.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+  </button>
+</div>
 
-<main>
-  <section class="sky-hero">
-    <div class="hero-console">
-      <div class="hero-brand">
-        <img src="assets/vayu_transparent.png" alt="Vayu Logo">
-        <div class="hero-title">VAYU</div>
-      </div>
-      <div class="hero-search">
-        <svg viewBox="0 0 24 24">
-          <path d="M9.5 3a6.5 6.5 0 0 1 5.18 10.43l.27.28h.79l4.99 5-1.49 1.48-5-4.99v-.79l-.28-.27A6.5 6.5 0 1 1 9.5 3zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z"/>
-        </svg>
-        <input type="text" id="searchInput" class="search-input" placeholder="Search your transcripts...">
-      </div>
-      <div class="hero-actions">
-        <button id="heroHistoryBtn" class="hero-button primary">History</button>
-        <button id="heroInsightsBtn" class="hero-button">Insights</button>
-      </div>
-    </div>
-
-    <div class="quest-panel">
-      <div class="quest-title">Dictation Story</div>
-      <div class="quest-row">
-        <div id="pulseBackups" class="quest-number">0</div>
-        <div class="quest-label">Local backups</div>
-      </div>
-      <div class="quest-row">
-        <div id="pulseToday" class="quest-number">0</div>
-        <div class="quest-label">Captured today</div>
-      </div>
-      <div class="quest-row">
-        <div id="pulseWords" class="quest-number">0</div>
-        <div class="quest-label">Searchable words</div>
-      </div>
-    </div>
-  </section>
-
-  <nav id="quickDock" class="fable-dock" aria-label="Quick actions">
-    <button class="dock-button" data-action="history" title="History" aria-label="History">
-      <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 1-8.54 6.15l-1.6-.92A11 11 0 1 0 13 1v2zm-1 3h2v6.1l4 2.3-1 1.73-5-2.88V6zM4 3v5h5V6H6.72A9.03 9.03 0 0 1 13 3V1A10.98 10.98 0 0 0 4.7 4.23L4 3z"/></svg>
-    </button>
-    <button class="dock-button" data-action="copy" title="Copy latest" aria-label="Copy latest">
-      <svg viewBox="0 0 24 24"><path d="M7 7V3h14v14h-4v4H3V7h4zm2 0h8v8h2V5H9v2zm-4 2v10h10V9H5z"/></svg>
-    </button>
-    <button class="dock-button" data-action="refresh" title="Refresh" aria-label="Refresh">
-      <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h8V3l-3.35 3.35z"/></svg>
-    </button>
-    <button class="dock-button" data-action="insights" title="Insights" aria-label="Insights">
-      <svg viewBox="0 0 24 24"><path d="M5 9.2h3V21H5V9.2zm5.5-6.2h3v18h-3V3zM16 13h3v8h-3v-8zm-12 8h17v2H4v-2z"/></svg>
-    </button>
-  </nav>
-
-  <section class="command-strip">
-    <div class="latest-panel">
-      <div class="panel-kicker">Latest Capture</div>
-      <div id="latestText" class="latest-text">No dictations yet.</div>
-      <div id="latestMeta" class="latest-meta">Waiting for a local transcript.</div>
-      <div class="panel-actions">
-        <button id="copyLatestBtn" class="action-btn primary">Copy Latest</button>
-        <button id="refreshBtn" class="action-btn">Refresh</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- TAB 1: Transcripts Feed -->
-  <div id="panelFeed" class="view-panel active">
-    <h2>Dictation Transcripts</h2>
-
-    <!-- Active Filter Tags -->
-    <div id="tagFilterRow" class="tag-filters">
-      <!-- Generated via JS -->
-    </div>
-
-    <div id="feedList" class="feed-container">
-      <!-- Generated via JS -->
-    </div>
+<!-- ===================== ZEN LANDING ===================== -->
+<div id="zen">
+  <div id="hero-brand">
+    <img src="assets/vayu_transparent.png" alt="Vayu">
   </div>
 
-  <!-- TAB 2: Tag Statistics -->
-  <div id="panelStats" class="view-panel">
-    <h2>Tag Insights Dashboard</h2>
-    
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-label">Total Dictations</div>
-        <div id="metricTotalDictations" class="metric-value">0</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Total Tags Logged</div>
-        <div id="metricTotalTags" class="metric-value">0</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Unique Combinations</div>
-        <div id="metricUniqueCombos" class="metric-value">0</div>
-      </div>
+  <div id="hero-card">
+    <div id="hero-search">
+      <svg viewBox="0 0 24 24">
+        <path d="M9.5 3a6.5 6.5 0 0 1 5.18 10.43l.27.28h.79l4.99 5-1.49 1.48-5-4.99v-.79l-.28-.27A6.5 6.5 0 1 1 9.5 3zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z"/>
+      </svg>
+      <input type="text" id="searchInput" placeholder="Search your transcripts...">
+      <div id="kbd-chip"><span>⌘</span><span>K</span></div>
     </div>
 
-    <div class="stats-split">
-      <!-- Tag Frequency Chart -->
-      <div class="stats-section-card">
-        <div class="stats-section-title">Tag Frequency</div>
-        <div id="tagChart" class="chart-container">
-          <!-- Bars generated via JS -->
+    <div id="hero-hint">Search what was said. Copy with one click.</div>
+
+    <div id="hero-actions">
+      <button class="hero-pill" id="heroHistoryBtn">
+        <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 1-8.54 6.15l1.9.62A7 7 0 1 0 13 5V3zm-1 3h2v6.1l4 2.3-1 1.73-5-2.88V6zM4.6 3.4 8 6.8 3.4 8.2l1.2-4.8z"/></svg>
+        History
+      </button>
+      <button class="hero-pill" id="heroAutomationsBtn">
+        <svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+        Automations
+      </button>
+      <button class="hero-pill" id="heroSettingsBtn">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.05 7.05 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.63 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.61.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54a7.05 7.05 0 0 0 1.63-.94l2.39.96c.22.09.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+        Settings
+      </button>
+    </div>
+
+    <div id="zen-stats">— captures · — words</div>
+  </div>
+</div>
+
+<!-- ===================== THE RIBBON ===================== -->
+<div id="ribbon-stage">
+  <svg id="ribbon-svg" preserveAspectRatio="none" title="Click to copy the latest dictation">
+    <path id="ribbon-band" d=""/>
+    <path id="ribbon-path" d="" fill="none" stroke="none"/>
+    <text id="ribbon-text"><textPath id="ribbon-textpath" href="#ribbon-path" startOffset="100%"></textPath></text>
+  </svg>
+</div>
+<div id="ribbon-copied">Copied to clipboard</div>
+
+<!-- ===================== HISTORY SHEET ===================== -->
+<div class="sheet" id="history-sheet">
+  <div class="sheet-head">
+    <div class="sheet-title">HISTORY</div>
+    <div class="sheet-tabs">
+      <button class="sheet-tab active" id="tabFeed">Transcripts</button>
+      <button class="sheet-tab" id="tabInsights">Insights</button>
+    </div>
+    <button class="sheet-close" id="closeHistory" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div class="subview active" id="viewFeed">
+      <div id="tagFilterRow"></div>
+      <div id="feedList"></div>
+    </div>
+    <div class="subview" id="viewInsights">
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Total Dictations</div>
+          <div id="metricTotalDictations" class="metric-value">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Total Tags Logged</div>
+          <div id="metricTotalTags" class="metric-value">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Unique Combinations</div>
+          <div id="metricUniqueCombos" class="metric-value">0</div>
         </div>
       </div>
-
-      <!-- Tag Combinations Stats List -->
-      <div class="stats-section-card">
-        <div class="stats-section-title">Co-occurrence Tag Combinations</div>
-        <div id="comboList" class="combo-list">
-          <!-- Combinations list generated via JS -->
+      <div class="stats-split">
+        <div class="stats-section-card">
+          <div class="stats-section-title">Tag Frequency</div>
+          <div id="tagChart"></div>
+        </div>
+        <div class="stats-section-card">
+          <div class="stats-section-title">Co-occurrence Tag Combinations</div>
+          <div id="comboList"></div>
         </div>
       </div>
     </div>
   </div>
-</main>
+</div>
+
+<!-- ===================== SETTINGS SHEET ===================== -->
+<div class="sheet" id="settings-sheet">
+  <div class="sheet-head">
+    <div class="sheet-title">SETTINGS</div>
+    <button class="sheet-close" id="closeSettings" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div class="settings-list">
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Global shortcut</div>
+          <div class="setting-detail">Hold <kbd>⌃ Control</kbd> + <kbd>Space</kbd> to talk, release to paste. Tap to toggle hands-free.</div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Transcription engine</div>
+          <div class="setting-detail" id="settingEngine">Local Whisper · ws://localhost:8181/ws</div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Transcript storage</div>
+          <div class="setting-detail" id="settingStorage">—</div>
+        </div>
+        <button class="setting-action" id="openStorageBtn">Open Folder</button>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Data</div>
+          <div class="setting-detail">Reload transcripts from disk.</div>
+        </div>
+        <button class="setting-action" id="reloadDataBtn">Refresh</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== AUTOMATIONS SHEET ===================== -->
+<div class="sheet" id="automations-sheet">
+  <div class="sheet-head">
+    <div class="sheet-title">AUTOMATIONS</div>
+    <button class="sheet-close" id="closeAutomations" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div class="settings-list">
+      <div class="setting-row column">
+        <div class="setting-info" style="margin-bottom: 10px;">
+          <div class="setting-name">Hooks</div>
+          <div class="setting-detail">Trigger pattern → action. A system-agnostic hook table — CAVE is just one possible action, not a requirement. Edit <code>automations.yaml</code> directly (agents can too, it's hot-reloaded) or use "Open File" below.</div>
+        </div>
+        <div id="automationsRoutes"></div>
+      </div>
+
+      <div class="setting-row column">
+        <div class="setting-info" style="margin-bottom: 10px;">
+          <div class="setting-name">Contacts</div>
+          <div class="setting-detail">Nicknames Vayu resolves when you say "Tell &lt;name&gt;, ...". Typos/mishearings close to a known alias also resolve automatically.</div>
+        </div>
+        <div id="automationsContacts"></div>
+        <div style="display:flex; gap:8px; margin-top: 12px;">
+          <input type="text" id="aliasContactInput" class="automation-input" placeholder="contact (e.g. conductor)" style="flex:1;">
+          <input type="text" id="aliasTermInput" class="automation-input" placeholder="new alias/nickname" style="flex:1;">
+          <button class="setting-action" id="addAliasBtn">Add alias</button>
+        </div>
+        <div id="addAliasStatus" style="font-size: 11.5px; color: var(--ink-soft); margin-top: 6px;"></div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Automations file</div>
+          <div class="setting-detail" id="settingAutomationsPath">—</div>
+        </div>
+        <button class="setting-action" id="openAutomationsBtn">Open File</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
   // Core Node.js bindings
-  const { clipboard } = require('electron');
+  const { clipboard, shell, ipcRenderer } = require('electron');
+  const path = require('path');
+  const os = require('os');
   const db = require('./db.js');
 
+  const DATA_DIR = process.env.VAYU_DATA_DIR || path.join(os.homedir(), 'Library', 'Application Support', 'Vayu');
+  const TRANSCRIPTS_DIR = path.join(DATA_DIR, 'transcripts');
+
   // Elements
-  const navFeed = document.getElementById('navFeed');
-  const navStats = document.getElementById('navStats');
-  const panelFeed = document.getElementById('panelFeed');
-  const panelStats = document.getElementById('panelStats');
-  const ambientCanvas = document.getElementById('ambientCanvas');
-  const quickDock = document.getElementById('quickDock');
-  const heroHistoryBtn = document.getElementById('heroHistoryBtn');
-  const heroInsightsBtn = document.getElementById('heroInsightsBtn');
-  const latestText = document.getElementById('latestText');
-  const latestMeta = document.getElementById('latestMeta');
-  const copyLatestBtn = document.getElementById('copyLatestBtn');
-  const refreshBtn = document.getElementById('refreshBtn');
-  const pulseBackups = document.getElementById('pulseBackups');
-  const pulseToday = document.getElementById('pulseToday');
-  const pulseWords = document.getElementById('pulseWords');
-  
   const searchInput = document.getElementById('searchInput');
+  const zenStats = document.getElementById('zen-stats');
   const tagFilterRow = document.getElementById('tagFilterRow');
   const feedList = document.getElementById('feedList');
-
   const metricTotalDictations = document.getElementById('metricTotalDictations');
   const metricTotalTags = document.getElementById('metricTotalTags');
   const metricUniqueCombos = document.getElementById('metricUniqueCombos');
   const tagChart = document.getElementById('tagChart');
   const comboList = document.getElementById('comboList');
+  const ribbonBand = document.getElementById('ribbon-band');
+  const ribbonPath = document.getElementById('ribbon-path');
+  const ribbonTextPath = document.getElementById('ribbon-textpath');
+  const ribbonSvg = document.getElementById('ribbon-svg');
+  const ribbonCopied = document.getElementById('ribbon-copied');
 
   // Application Data State
   let allTranscripts = [];
   let activeTagFilter = null;
   let currentFiltered = [];
 
-  // 1. Navigation Panel Toggles
-  navFeed.addEventListener('click', () => {
-    showFeed();
-  });
-
-  heroHistoryBtn.addEventListener('click', () => {
-    showFeed();
-  });
-
-  function showFeed() {
-    navFeed.classList.add('active');
-    navStats.classList.remove('active');
-    panelFeed.classList.add('active');
-    panelStats.classList.remove('active');
-    renderFeed();
+  // ===================== mode switching =====================
+  function setMode(mode) {
+    document.body.dataset.mode = mode;
+    if (mode === 'history') renderFeed();
+    if (mode === 'automations') loadAutomations();
+    if (mode === 'zen') {
+      searchInput.value = '';
+      renderFilters();
+    }
   }
 
-  navStats.addEventListener('click', () => {
-    showStats();
-  });
-
-  heroInsightsBtn.addEventListener('click', () => {
-    showStats();
-  });
-
-  function showStats() {
-    navFeed.classList.remove('active');
-    navStats.classList.add('active');
-    panelFeed.classList.remove('active');
-    panelStats.classList.add('active');
-    calculateStats();
-  }
+  document.getElementById('heroHistoryBtn').addEventListener('click', () => setMode('history'));
+  document.getElementById('orbHistory').addEventListener('click', () => setMode('history'));
+  document.getElementById('heroAutomationsBtn').addEventListener('click', () => setMode('automations'));
+  document.getElementById('orbAutomations').addEventListener('click', () => setMode('automations'));
+  document.getElementById('heroSettingsBtn').addEventListener('click', () => setMode('settings'));
+  document.getElementById('orbSettings').addEventListener('click', () => setMode('settings'));
+  document.getElementById('closeHistory').addEventListener('click', () => setMode('zen'));
+  document.getElementById('closeAutomations').addEventListener('click', () => setMode('zen'));
+  document.getElementById('closeSettings').addEventListener('click', () => setMode('zen'));
 
   window.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
+      setMode('zen');
       searchInput.focus();
       searchInput.select();
     }
+    if (event.key === 'Escape') setMode('zen');
   });
 
-  quickDock.addEventListener('mousemove', (event) => {
-    const baseSize = 48;
-    const maxSize = 66;
-    const range = 150;
-    quickDock.querySelectorAll('.dock-button').forEach(button => {
-      const rect = button.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const distance = Math.abs(event.clientX - centerX);
-      let size = baseSize;
-      if (distance < range) {
-        const factor = (Math.cos((distance / range) * Math.PI) + 1) / 2;
-        size = baseSize + (maxSize - baseSize) * factor;
-      }
-      button.style.setProperty('--size', `${size.toFixed(1)}px`);
-    });
-  });
-
-  quickDock.addEventListener('mouseleave', () => {
-    quickDock.querySelectorAll('.dock-button').forEach(button => {
-      button.style.setProperty('--size', '48px');
-    });
-  });
-
-  quickDock.addEventListener('click', (event) => {
-    const button = event.target.closest('.dock-button');
-    if (!button) return;
-
-    const action = button.dataset.action;
-    if (action === 'history') {
-      showFeed();
-    } else if (action === 'copy') {
-      copyLatestBtn.click();
-    } else if (action === 'refresh') {
-      refreshBtn.click();
-    } else if (action === 'insights') {
-      showStats();
+  // Typing in the zen search opens History with live-filtered results
+  searchInput.addEventListener('input', () => {
+    if (searchInput.value.trim() && document.body.dataset.mode !== 'history') {
+      setMode('history');
+      searchInput.focus();
     }
+    renderFeed();
   });
 
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  let ambientFrame = null;
-  let windStrokes = [];
-  let glassRects = [];
+  // History tabs
+  const tabFeed = document.getElementById('tabFeed');
+  const tabInsights = document.getElementById('tabInsights');
+  const viewFeed = document.getElementById('viewFeed');
+  const viewInsights = document.getElementById('viewInsights');
 
-  function collectGlassRects() {
-    const selectors = [
-      '.hero-console',
-      '.quest-panel',
-      '.latest-panel',
-      '.transcript-card',
-      '.metric-card',
-      '.stats-section-card',
-      '.fable-dock'
-    ];
+  tabFeed.addEventListener('click', () => {
+    tabFeed.classList.add('active'); tabInsights.classList.remove('active');
+    viewFeed.classList.add('active'); viewInsights.classList.remove('active');
+    renderFeed();
+  });
 
-    glassRects = selectors.flatMap(selector => {
-      return Array.from(document.querySelectorAll(selector)).map(element => {
-        const rect = element.getBoundingClientRect();
-        return {
-          left: rect.left - 24,
-          right: rect.right + 24,
-          top: rect.top - 24,
-          bottom: rect.bottom + 24
-        };
-      });
-    });
-  }
+  tabInsights.addEventListener('click', () => {
+    tabInsights.classList.add('active'); tabFeed.classList.remove('active');
+    viewInsights.classList.add('active'); viewFeed.classList.remove('active');
+    calculateStats();
+  });
 
-  function isBehindGlass(x, y) {
-    return glassRects.some(rect => (
-      x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+  // Settings actions
+  document.getElementById('settingStorage').textContent = TRANSCRIPTS_DIR;
+  document.getElementById('openStorageBtn').addEventListener('click', () => {
+    shell.openPath(TRANSCRIPTS_DIR);
+  });
+  document.getElementById('reloadDataBtn').addEventListener('click', (e) => {
+    loadData();
+    e.target.textContent = 'Refreshed';
+    setTimeout(() => { e.target.textContent = 'Refresh'; }, 900);
+  });
+
+  // ===================== automations + contacts (Settings) =====================
+  const AUTOMATIONS_PATH = path.join(DATA_DIR, 'automations.yaml');
+  document.getElementById('settingAutomationsPath').textContent = AUTOMATIONS_PATH;
+  document.getElementById('openAutomationsBtn').addEventListener('click', () => {
+    shell.openPath(AUTOMATIONS_PATH);
+  });
+
+  function escapeHtmlLocal(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ));
   }
 
-  function resizeAmbientCanvas() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    ambientCanvas.width = Math.floor(width * dpr);
-    ambientCanvas.height = Math.floor(height * dpr);
-    ambientCanvas.style.width = `${width}px`;
-    ambientCanvas.style.height = `${height}px`;
-
-    const ctx = ambientCanvas.getContext('2d');
-    if (ctx) {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  async function loadAutomations() {
+    let data = { routes: [], contacts: {} };
+    try {
+      data = await ipcRenderer.invoke('vayu-automations-get');
+    } catch (e) {
+      console.error('vayu-automations-get failed', e);
     }
-
-    windStrokes = Array.from({ length: 24 }, (_, index) => ({
-      baseX: (index * 173) % (width + 260),
-      baseY: 42 + ((index * 89) % Math.max(height - 84, 1)),
-      length: 92 + ((index * 37) % 96),
-      amp: 10 + ((index * 11) % 22),
-      speed: 0.012 + (index % 5) * 0.004,
-      alpha: 0.12 + (index % 4) * 0.025
-    }));
-    collectGlassRects();
+    renderAutomationRoutes(data.routes || []);
+    renderAutomationContacts(data.contacts || {});
   }
 
-  function drawAmbient(time) {
-    const ctx = ambientCanvas.getContext('2d');
-    if (!ctx || reduceMotion.matches || document.hidden) {
-      ambientFrame = null;
+  function renderAutomationRoutes(routes) {
+    const el = document.getElementById('automationsRoutes');
+    if (!routes.length) { el.innerHTML = '<div class="setting-detail">No routes configured.</div>'; return; }
+    el.innerHTML = routes.map((r) => `
+      <div class="automation-route">
+        <span class="route-name">${escapeHtmlLocal(r.name)}</span>
+        <span class="route-match" title="${escapeHtmlLocal(r.match)}">${escapeHtmlLocal(r.match)}</span>
+        <span class="route-action">${escapeHtmlLocal(r.action)}</span>
+      </div>
+    `).join('');
+  }
+
+  function renderAutomationContacts(contacts) {
+    const el = document.getElementById('automationsContacts');
+    const names = Object.keys(contacts);
+    if (!names.length) { el.innerHTML = '<div class="setting-detail">No contacts configured.</div>'; return; }
+    el.innerHTML = names.map((name) => `
+      <div class="contact-block">
+        <div class="contact-name">${escapeHtmlLocal(name)}</div>
+        <div class="contact-aliases">
+          ${(contacts[name] || []).map((a) => `<span class="alias-chip">${escapeHtmlLocal(a)}</span>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('addAliasBtn').addEventListener('click', async () => {
+    const contactInput = document.getElementById('aliasContactInput');
+    const termInput = document.getElementById('aliasTermInput');
+    const status = document.getElementById('addAliasStatus');
+    const canonical = contactInput.value.trim();
+    const alias = termInput.value.trim();
+    if (!canonical || !alias) {
+      status.textContent = 'Enter both a contact and an alias.';
       return;
     }
-
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    ctx.clearRect(0, 0, width, height);
-    collectGlassRects();
-
-    windStrokes.forEach((stroke, index) => {
-      const travel = (time * stroke.speed + stroke.baseX) % (width + 280);
-      const x = travel - 140;
-      const y = stroke.baseY + Math.sin(time * 0.001 + index) * stroke.amp;
-      const midX = x + stroke.length * 0.5;
-
-      if (isBehindGlass(x, y) || isBehindGlass(midX, y) || isBehindGlass(x + stroke.length, y)) {
-        return;
+    status.textContent = 'Adding…';
+    try {
+      const result = await ipcRenderer.invoke('vayu-automations-add-alias', { canonical, alias });
+      if (result && result.ok) {
+        status.textContent = `Added "${alias}" → ${canonical}.`;
+        termInput.value = '';
+        renderAutomationContacts(result.contacts || {});
+      } else {
+        status.textContent = (result && result.error) || 'Failed to add alias.';
       }
-
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.bezierCurveTo(
-        x + stroke.length * 0.28,
-        y - stroke.amp,
-        x + stroke.length * 0.72,
-        y + stroke.amp,
-        x + stroke.length,
-        y
-      );
-      ctx.lineWidth = 1.2;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = `rgba(54, 126, 193, ${stroke.alpha})`;
-      ctx.stroke();
-    });
-
-    ambientFrame = requestAnimationFrame(drawAmbient);
-  }
-
-  function startAmbient() {
-    if (reduceMotion.matches) return;
-    resizeAmbientCanvas();
-    if (ambientFrame === null) {
-      ambientFrame = requestAnimationFrame(drawAmbient);
-    }
-  }
-
-  window.addEventListener('resize', resizeAmbientCanvas);
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && ambientFrame !== null) {
-      cancelAnimationFrame(ambientFrame);
-      ambientFrame = null;
-    } else {
-      startAmbient();
+    } catch (e) {
+      status.textContent = `Failed: ${e.message}`;
     }
   });
 
-  // 2. Fetch Data & Build UI
+  loadAutomations();
+
+  // ===================== the ribbon =====================
+  // The latest dictation rides a waving band across the sky, wisprflow-style.
+  // The path undulates each frame; the text travels along it via textPath.
+  let ribbonRaf = null;
+  const RIBBON_SPEED = 8;   // percent per second, leftward
+  const RIBBON_SPAN = 280;  // 110% (offscreen right) -> -170% (fully exited)
+
+  function ribbonMessage() {
+    const latest = allTranscripts[0];
+    if (latest && latest.text) return latest.text.trim();
+    return 'Hold ⌃ Control + Space and your words fly here…';
+  }
+
+  function updateRibbonText() {
+    ribbonTextPath.textContent = ribbonMessage();
+  }
+
+  function drawRibbon(now) {
+    const w = ribbonSvg.clientWidth;
+    const h = ribbonSvg.clientHeight;
+    if (!w || !h) { ribbonRaf = requestAnimationFrame(drawRibbon); return; }
+
+    const t = now / 1000;
+    const midY = h * 0.52;
+    const amp = h * 0.13;
+    const k = (Math.PI * 2) / (w * 0.62);
+    const halfBand = 30;
+
+    const pts = [];
+    const STEP = 40;
+    for (let x = -STEP; x <= w + STEP; x += STEP) {
+      pts.push([x, midY + amp * Math.sin(k * x - t * 0.9)]);
+    }
+
+    const line = pts.map((p, i) => (i === 0 ? `M ${p[0]} ${p[1]}` : `L ${p[0]} ${p[1]}`)).join(' ');
+    ribbonPath.setAttribute('d', line);
+
+    const top = pts.map((p, i) => (i === 0 ? `M ${p[0]} ${p[1] - halfBand}` : `L ${p[0]} ${p[1] - halfBand}`)).join(' ');
+    const bottom = pts.slice().reverse().map(p => `L ${p[0]} ${p[1] + halfBand}`).join(' ');
+    ribbonBand.setAttribute('d', `${top} ${bottom} Z`);
+
+    // march the words along the band — time-based so compositor rAF
+    // throttling (occluded window) can't slow the parade
+    const offset = 110 - ((t * RIBBON_SPEED) % RIBBON_SPAN);
+    ribbonTextPath.setAttribute('startOffset', `${offset}%`);
+
+    ribbonRaf = requestAnimationFrame(drawRibbon);
+  }
+
+  ribbonSvg.addEventListener('click', () => {
+    const latest = allTranscripts[0];
+    if (!latest || !latest.text) return;
+    clipboard.writeText(latest.text);
+    ribbonCopied.classList.add('show');
+    setTimeout(() => ribbonCopied.classList.remove('show'), 1200);
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && ribbonRaf !== null) {
+      cancelAnimationFrame(ribbonRaf);
+      ribbonRaf = null;
+    } else if (!document.hidden && ribbonRaf === null) {
+      ribbonRaf = requestAnimationFrame(drawRibbon);
+    }
+  });
+
+  // ===================== data =====================
   function loadData() {
     allTranscripts = db.getAllTranscripts();
     renderSummary();
     renderFilters();
     renderFeed();
+    updateRibbonText();
   }
 
   function wordCount(text) {
@@ -1190,29 +1028,11 @@
   }
 
   function renderSummary() {
-    const latest = allTranscripts[0];
-    const todayKey = new Date().toDateString();
-    const todayCount = allTranscripts.filter(t => new Date(t.timestamp).toDateString() === todayKey).length;
     const totalWords = allTranscripts.reduce((sum, t) => sum + wordCount(t.text), 0);
-
-    pulseBackups.textContent = allTranscripts.length;
-    pulseToday.textContent = todayCount;
-    pulseWords.textContent = totalWords;
-
-    if (!latest) {
-      latestText.textContent = 'No dictations yet.';
-      latestMeta.textContent = 'Waiting for a local transcript.';
-      copyLatestBtn.disabled = true;
-      return;
-    }
-
-    latestText.textContent = latest.text || '';
-    latestMeta.textContent = `${formatDate(latest.timestamp)} · ${wordCount(latest.text)} words`;
-    copyLatestBtn.disabled = false;
+    zenStats.textContent = `${allTranscripts.length} captures · ${totalWords} words`;
   }
 
   function renderFilters() {
-    // Collect all unique tags and sort
     const tags = new Set();
     allTranscripts.forEach(t => {
       if (t.tags) t.tags.forEach(tag => tags.add(tag));
@@ -1234,8 +1054,7 @@
 
   function renderFeed() {
     const searchVal = searchInput.value.toLowerCase();
-    
-    // Filter transcripts
+
     currentFiltered = allTranscripts.filter(t => {
       const text = t.text || '';
       const matchSearch = text.toLowerCase().includes(searchVal);
@@ -1244,7 +1063,7 @@
     });
 
     if (currentFiltered.length === 0) {
-      feedList.innerHTML = `<div style="text-align:center; padding: 40px; color: var(--text-muted);">No matching captures.</div>`;
+      feedList.innerHTML = `<div style="text-align:center; padding: 40px; color: var(--ink-soft);">No matching captures.</div>`;
       return;
     }
 
@@ -1257,7 +1076,7 @@
           tagHtml += `<span class="tag-badge">${escapeHtml(tag)}</span>`;
         });
       }
-      
+
       html += `
         <div class="transcript-card">
           <div class="card-header">
@@ -1274,8 +1093,6 @@
     feedList.innerHTML = html;
   }
 
-  searchInput.addEventListener('input', renderFeed);
-
   feedList.addEventListener('click', (event) => {
     const button = event.target.closest('.copy-btn');
     if (!button) return;
@@ -1290,26 +1107,7 @@
     }, 900);
   });
 
-  copyLatestBtn.addEventListener('click', () => {
-    const latest = allTranscripts[0];
-    if (!latest) return;
-
-    clipboard.writeText(latest.text || '');
-    copyLatestBtn.textContent = 'Copied';
-    setTimeout(() => {
-      copyLatestBtn.textContent = 'Copy Latest';
-    }, 900);
-  });
-
-  refreshBtn.addEventListener('click', () => {
-    loadData();
-    refreshBtn.textContent = 'Refreshed';
-    setTimeout(() => {
-      refreshBtn.textContent = 'Refresh';
-    }, 900);
-  });
-
-  // 3. Stats Calculation Engine
+  // ===================== stats =====================
   function calculateStats() {
     metricTotalDictations.textContent = allTranscripts.length;
 
@@ -1320,17 +1118,14 @@
     allTranscripts.forEach(t => {
       const currentTags = t.tags || [];
       totalTagLogs += currentTags.length;
-      
-      // Calculate single tag frequencies
+
       currentTags.forEach(tag => {
         tagCounts[tag] = (tagCounts[tag] || 0) + 1;
       });
 
-      // Calculate co-occurring tag combinations (combinations of pairs)
       if (currentTags.length > 1) {
         for (let i = 0; i < currentTags.length; i++) {
           for (let j = i + 1; j < currentTags.length; j++) {
-            // Sort keys so pair [A, B] and [B, A] are grouped identically
             const pair = [currentTags[i], currentTags[j]].sort();
             const pairKey = pair.join(' + ');
             comboCounts[pairKey] = (comboCounts[pairKey] || 0) + 1;
@@ -1342,19 +1137,18 @@
     metricTotalTags.textContent = totalTagLogs;
     metricUniqueCombos.textContent = Object.keys(comboCounts).length;
 
-    // A. Render Frequency Chart
     const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
     const maxTagCount = sortedTags.length > 0 ? sortedTags[0][1] : 1;
 
     let chartHtml = "";
     if (sortedTags.length === 0) {
-      chartHtml = `<div style="text-align:center; padding:20px; color:var(--text-muted);">No tag statistics yet.</div>`;
+      chartHtml = `<div style="text-align:center; padding:20px; color:var(--ink-soft);">No tag statistics yet.</div>`;
     } else {
       sortedTags.forEach(([tag, count]) => {
         const pct = (count / maxTagCount) * 100;
         chartHtml += `
           <div class="chart-row">
-            <div class="chart-label" title="${tag}">${tag}</div>
+            <div class="chart-label" title="${escapeHtml(tag)}">${escapeHtml(tag)}</div>
             <div class="chart-bar-bg">
               <div class="chart-bar-fill" style="width: ${pct}%"></div>
             </div>
@@ -1365,20 +1159,19 @@
     }
     tagChart.innerHTML = chartHtml;
 
-    // B. Render Combo Lists
     const sortedCombos = Object.entries(comboCounts).sort((a, b) => b[1] - a[1]);
     let comboHtml = "";
     if (sortedCombos.length === 0) {
-      comboHtml = `<div style="text-align:center; padding:20px; color:var(--text-muted);">No tag combinations yet. Need multiple tags in transcripts.</div>`;
+      comboHtml = `<div style="text-align:center; padding:20px; color:var(--ink-soft);">No tag combinations yet. Need multiple tags in transcripts.</div>`;
     } else {
       sortedCombos.forEach(([pairKey, count]) => {
         const parts = pairKey.split(' + ');
         comboHtml += `
           <div class="combo-item">
             <div class="combo-pair">
-              <span class="tag-badge" style="margin:0;">${parts[0]}</span>
+              <span class="tag-badge" style="margin:0;">${escapeHtml(parts[0])}</span>
               <span class="combo-plus">+</span>
-              <span class="tag-badge" style="margin:0;">${parts[1]}</span>
+              <span class="tag-badge" style="margin:0;">${escapeHtml(parts[1])}</span>
             </div>
             <div class="combo-count">${count} co-occurrences</div>
           </div>
@@ -1388,7 +1181,6 @@
     comboList.innerHTML = comboHtml;
   }
 
-  // Escape HTML helper
   function escapeHtml(text) {
     return String(text || '')
       .replace(/&/g, "&amp;")
@@ -1401,7 +1193,7 @@
   // Load on start
   window.onload = () => {
     loadData();
-    startAmbient();
+    ribbonRaf = requestAnimationFrame(drawRibbon);
   };
 </script>
 </body>

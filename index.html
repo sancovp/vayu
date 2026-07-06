@@ -15,57 +15,64 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    padding-bottom: 10px;
     user-select: none;
-    -webkit-app-region: drag; /* Allows dragging the overlay window */
   }
-  
+
+  /* No box, no panel — the wave IS the overlay. */
   #container {
-    width: 420px;
-    background: rgba(8, 11, 17, 0.78);
-    backdrop-filter: blur(24px) saturate(160%);
-    border: 1px solid rgba(93, 211, 255, 0.18);
-    border-radius: 12px;
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    position: relative;
+    width: 100vw;
+    height: 100%;
     display: flex;
     flex-direction: column;
+    justify-content: flex-end;
     align-items: center;
-    padding: 12px;
     opacity: 0;
-    transform: translateY(20px) scale(0.96);
-    transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), 
-                transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-    -webkit-app-region: no-drag;
+    transform: translateY(28px);
+    transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  
+
   #container.visible {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
   }
 
-  #header-row {
+  /* The sky column: status pill riding the glass pane's top-right corner */
+  #sky-wrap {
+    position: relative;
+    width: min(820px, 90vw);
     display: flex;
-    width: 100%;
-    justify-content: space-between;
-    align-items: stretch;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-
-  #transcript-panel {
-    flex: 1;
-    min-width: 0;
+    flex-direction: column;
+    margin-bottom: 4px;
   }
 
   #status-row {
+    align-self: flex-end;
+    z-index: 20;
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 0 6px 6px;
-    color: rgba(210, 232, 244, 0.68);
+    gap: 10px;
+    padding: 5px 6px 5px 14px;
+    margin-bottom: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(20px) saturate(170%);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: 0 10px 30px rgba(30, 90, 140, 0.22);
+    color: rgba(28, 58, 80, 0.78);
     font-size: 10.5px;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.4s ease 0.12s, transform 0.4s ease 0.12s;
+  }
+
+  #container.visible #status-row {
+    opacity: 1;
+    transform: none;
   }
 
   #live-dot {
@@ -77,74 +84,161 @@
   }
 
   #word-count {
-    margin-left: auto;
-    color: rgba(210, 232, 244, 0.52);
-  }
-  
-  #text-display {
-    color: #f3f4f6;
-    font-size: 14px;
-    line-height: 1.5;
-    text-align: left;
-    min-height: 72px;
-    max-height: 116px;
-    overflow-y: auto;
-    padding: 8px 10px;
-    font-weight: 500;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-    word-wrap: break-word;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.035);
-  }
-  
-  #text-display:empty::before {
-    content: "Speak now...";
-    color: rgba(0, 240, 255, 0.6);
-    font-style: italic;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    text-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+    color: rgba(28, 58, 80, 0.45);
   }
 
-  #dash-btn {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    width: 24px;
-    height: 24px;
-    color: #9ca3af;
+  #open-app-tab {
+    height: 28px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(226, 243, 255, 0.88));
+    color: #1c4b66;
     font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: none;
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
-    margin-top: 2px;
+    gap: 6px;
+    box-shadow: 0 4px 14px rgba(40, 120, 180, 0.28);
+    transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
   }
 
-  #dash-btn:hover {
-    background: rgba(0, 240, 255, 0.15);
-    border-color: #00f0ff;
-    color: #00f0ff;
-    box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
+  #open-app-tab:hover,
+  #open-app-tab:focus-visible {
+    border-color: rgba(0, 190, 255, 0.9);
+    box-shadow: 0 6px 22px rgba(0, 170, 255, 0.4);
+    outline: none;
+    transform: translateY(-1px);
   }
 
+  /* ===== The glass sky: a pane words accumulate on, weather behind ===== */
+  #glass-sky {
+    position: relative;
+    width: 100%;
+    height: 148px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: linear-gradient(180deg, rgba(224, 242, 255, 0.42), rgba(179, 219, 250, 0.30));
+    backdrop-filter: blur(30px) saturate(115%);
+    -webkit-backdrop-filter: blur(30px) saturate(115%);
+    box-shadow: 0 18px 50px rgba(15, 45, 75, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.45),
+                inset 0 -14px 30px rgba(150, 215, 255, 0.08);
+    overflow: hidden;
+  }
+
+  /* weather layer: clouds and leaves blowing through, behind the words */
+  #sky-weather {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .sky-cloud {
+    position: absolute;
+    border-radius: 999px;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 70%);
+    filter: blur(4px);
+    animation: cloud-pass var(--dur, 26s) linear var(--delay, 0s) infinite;
+  }
+
+  @keyframes cloud-pass {
+    from { transform: translateX(880px); }
+    to   { transform: translateX(-320px); }
+  }
+
+  .sky-leaf {
+    position: absolute;
+    width: 12px;
+    height: 16px;
+    border-radius: 0 70% 0 70%;
+    background: linear-gradient(135deg, rgba(86, 190, 110, 0.9), rgba(46, 150, 78, 0.72));
+    box-shadow: 0 0 6px rgba(46, 150, 78, 0.4);
+    animation: leaf-fly var(--dur, 9s) linear var(--delay, 0s) infinite;
+  }
+
+  @keyframes leaf-fly {
+    0%   { opacity: 0;   transform: translate(860px, 0)     rotate(0deg); }
+    8%   { opacity: 0.8; }
+    30%  {               transform: translate(600px, 26px)  rotate(120deg); }
+    55%  {               transform: translate(380px, -8px)  rotate(230deg); }
+    80%  {               transform: translate(150px, 22px)  rotate(320deg); }
+    92%  { opacity: 0.6; }
+    100% { opacity: 0;   transform: translate(-50px, 6px)   rotate(400deg); }
+  }
+
+  /* the page: words write left-to-right and ACCUMULATE — nothing blows away */
+  #sky-page {
+    position: absolute;
+    inset: 0;
+    padding: 16px 22px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    font-size: 21px;
+    font-weight: 640;
+    line-height: 1.55;
+    text-align: left;
+    color: #ffffff;
+  }
+
+  #sky-page::-webkit-scrollbar { display: none; }
+
+  .wind-word {
+    display: inline-block;
+    margin-right: 0.34em;
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(10, 30, 50, 0.6),
+                 0 0 18px rgba(0, 190, 255, 0.35),
+                 0 2px 14px rgba(0, 0, 0, 0.4);
+    animation: gust-in 0.5s cubic-bezier(0.18, 0.9, 0.32, 1.15) both,
+               drift 4s ease-in-out calc(var(--i, 0) * -0.6s) infinite alternate;
+  }
+
+  .wind-word.partial {
+    opacity: 0.82;
+    filter: blur(0.4px);
+  }
+
+  @keyframes gust-in {
+    0%   { opacity: 0; transform: translate(26px, -10px) rotate(4deg); filter: blur(7px); }
+    65%  { opacity: 1; transform: translate(-2px, 1px) rotate(-1deg);  filter: blur(0.5px); }
+    100% { opacity: 1; transform: none; filter: none; }
+  }
+
+  /* wispy idle sway — `translate` property, composes with the gust transform */
+  @keyframes drift {
+    from { translate: 0 -1.2px; }
+    to   { translate: 0 1.2px; }
+  }
+
+  #status-text {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+  }
+  
   #wave-wrapper {
     position: relative;
-    width: 320px;
-    height: 68px;
+    width: 100%;
+    height: 176px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: 4px;
   }
 
   #logo-icon {
     position: absolute;
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     object-fit: contain;
     pointer-events: none;
     z-index: 5;
@@ -164,8 +258,8 @@
 
   canvas {
     display: block;
-    width: 320px;
-    height: 68px;
+    width: 100%;
+    height: 176px;
     background: transparent;
     z-index: 1;
   }
@@ -174,16 +268,26 @@
 <body>
 
 <div id="container">
-  <div id="header-row">
-    <div id="transcript-panel">
-      <div id="status-row">
-        <span id="live-dot"></span>
-        <span>Listening</span>
-        <span id="word-count">0 words</span>
-      </div>
-      <div id="text-display"></div>
+  <div id="sky-wrap">
+    <div id="status-row">
+      <span id="live-dot"></span>
+      <span>Listening</span>
+      <span id="word-count">0 words</span>
+      <button id="open-app-tab" type="button" title="Open Vayu Dashboard" aria-label="Open Vayu Dashboard">
+        <span>Open Vayu</span>
+      </button>
     </div>
-    <button id="dash-btn" title="Open Dashboard">↗</button>
+    <div id="glass-sky">
+      <div id="sky-weather">
+        <span class="sky-cloud" style="top: 14%; width: 90px; height: 26px; --dur: 30s; --delay: -6s;"></span>
+        <span class="sky-cloud" style="top: 48%; width: 64px; height: 20px; --dur: 22s; --delay: -14s;"></span>
+        <span class="sky-cloud" style="top: 72%; width: 110px; height: 30px; --dur: 38s; --delay: -24s;"></span>
+        <span class="sky-leaf" style="top: 22%; --dur: 10s; --delay: -2s;"></span>
+        <span class="sky-leaf" style="top: 58%; --dur: 8s;  --delay: -6s; scale: 0.8;"></span>
+      </div>
+      <div id="sky-page"></div>
+      <div id="status-text"></div>
+    </div>
   </div>
   <div id="wave-wrapper">
     <canvas id="gl"></canvas>
@@ -203,15 +307,15 @@
   uniform float uVolume; // Driven by microphone volume (0.0 - 1.0+)
   
   const float PI = 3.14159265359;
-  const float AMPLITUDE   = 0.20;
+  const float AMPLITUDE   = 0.32;
   const float FREQ        = 1.05;
   const float ABER_FREQ   = 0.95;
-  const float SPEED       = 2.0;
+  const float SPEED       = 2.3;
   const float WAVE_SCALE  = 0.95;
   const float ABERRATION  = 2.0;
   const float THICKNESS   = 2.8;
   const float INTENSITY   = 2.4;
-  const float FALLOFF     = 1.8;
+  const float FALLOFF     = 1.1;
   const float EDGE_MASK   = 0.5;
   const float EDGE_INSET  = 0.0;
   const float BAND_FILL   = 32000.0;
@@ -235,12 +339,15 @@
       float drift = mod(t, 20.0*PI) * SPEED;
 
       float xN  = p.x / max(aspect, 1.0);
-      float env = cos(PI*0.5 * min(abs(0.9*xN), 1.0));
+      float env = cos(PI*0.5 * min(abs(0.72*xN), 1.0));
       env *= env;
 
-      // Bind amplitude and intensities dynamically to mic volume
-      float volScale = clamp(0.45 + uVolume * 1.0, 0.45, 1.4);
-      float A1    = (AMPLITUDE + 0.04 * sin(t * 2.0)) * volScale;
+      // Bind amplitude and intensities dynamically to mic volume —
+      // exaggerated: whisper = calm ripple, speech = the wave ROARS,
+      // plus a voice-driven flutter harmonic so it churns while you talk
+      float volScale = clamp(0.30 + uVolume * 1.9, 0.30, 2.3);
+      float flutter  = uVolume * 0.12 * sin(t * 9.0 + p.x * 2.4);
+      float A1    = (AMPLITUDE + 0.05 * sin(t * 2.4) + flutter) * volScale;
       float A2    = A1 * 1.15;
       float AB    = ABERRATION * (0.6 + 0.4 * volScale);
       float th    = 0.01 * THICKNESS;
@@ -277,7 +384,13 @@
       float gauss = exp(-pow(xN*FALLOFF, 2.0));
       col *= em*gauss;
       
-      gl_FragColor = vec4(col, col.r + col.g + col.b > 0.02 ? 1.0 : 0.0);
+      // Alpha follows brightness so the glow feathers into the desktop —
+      // a binary threshold renders the dim halo as an opaque black blob.
+      // Un-premultiply the color so dim glow TINTS the desktop instead of
+      // darkening it (straight-alpha compositing of dark pixels = gray smear).
+      float a = clamp(pow((col.r + col.g + col.b) * 1.3, 1.7), 0.0, 1.0);
+      vec3 outCol = col / max(a, 0.05);
+      gl_FragColor = vec4(outCol, a);
   }
 </script>
 
@@ -319,10 +432,11 @@
 
   // UI elements
   const container = document.getElementById('container');
-  const textDisplay = document.getElementById('text-display');
+  const skyPage = document.getElementById('sky-page');
+  const statusText = document.getElementById('status-text');
   const wordCount = document.getElementById('word-count');
   const canvas = document.getElementById('gl');
-  const dashBtn = document.getElementById('dash-btn');
+  const openAppTab = document.getElementById('open-app-tab');
 
   // WebGL State
   let gl, prog, uVolLoc, uTimeLoc, uResLoc;
@@ -339,7 +453,8 @@
   let isStartingRecording = false;
   let isStoppingRecording = false;
   let transcribedText = "";
-  let lastIncomingTranscript = "";
+  let committedText = "";
+  let currentPartial = "";
 
   function getHelperPath() {
     if (process.resourcesPath) {
@@ -357,53 +472,85 @@
     return text ? text.split(" ").length : 0;
   }
 
-  function refreshTranscriptDisplay() {
-    textDisplay.textContent = transcribedText;
-    wordCount.textContent = `${countTranscriptWords(transcribedText)} words`;
-    textDisplay.scrollTop = textDisplay.scrollHeight;
+  function setStatusText(message) {
+    statusText.textContent = message || "";
   }
 
-  function findSuffixPrefixOverlap(left, right) {
-    const max = Math.min(left.length, right.length);
-    for (let size = max; size > 0; size--) {
-      if (left.slice(-size).toLowerCase() === right.slice(0, size).toLowerCase()) {
-        return size;
+  // ===== The glass page =====
+  // Words write left-to-right on the glass sky and ACCUMULATE — nothing is
+  // ever blown away. When the page fills, it scrolls to follow the newest
+  // word (everything stays; it's all in the paste). Spans are reconciled in
+  // place so unchanged words never flicker when Whisper revises the partial.
+  let streamWords = []; // [{ el, text }]
+
+  function resetWordStream() {
+    streamWords = [];
+    skyPage.innerHTML = "";
+    wordCount.textContent = "0 words";
+  }
+
+  function refreshTranscriptDisplay() {
+    const committedWords = committedText ? committedText.split(" ") : [];
+    const partialWords = currentPartial ? currentPartial.split(" ") : [];
+    const words = committedWords.concat(partialWords);
+    wordCount.textContent = `${words.length} ${words.length === 1 ? 'word' : 'words'}`;
+    if (words.length) setStatusText("");
+
+    for (let i = 0; i < words.length; i++) {
+      const isCommitted = i < committedWords.length;
+      if (i < streamWords.length) {
+        const w = streamWords[i];
+        if (w.text !== words[i]) {
+          // Whisper revised this word — swap text and re-gust it
+          w.text = words[i];
+          w.el.textContent = words[i];
+          w.el.style.animation = 'none';
+          void w.el.offsetWidth;
+          w.el.style.animation = '';
+        }
+        w.el.classList.toggle('partial', !isCommitted);
+      } else {
+        const el = document.createElement('span');
+        el.className = 'wind-word' + (isCommitted ? '' : ' partial');
+        el.style.setProperty('--i', String(i % 7));
+        el.textContent = words[i];
+        skyPage.appendChild(el);
+        streamWords.push({ el, text: words[i] });
       }
     }
-    return 0;
-  }
 
-  function appendTranscriptWithOverlap(existing, incoming) {
-    const current = normalizeTranscriptText(existing);
-    const next = normalizeTranscriptText(incoming);
-
-    if (!next) return current;
-    if (!current) return next;
-    if (next === current) return current;
-    if (next.startsWith(current)) return next;
-    if (current.endsWith(next)) return current;
-
-    const overlap = findSuffixPrefixOverlap(current, next);
-    const suffix = next.slice(overlap).trim();
-    if (!suffix) return current;
-
-    if (/^[.,!?;:]/.test(suffix)) {
-      return `${current}${suffix}`;
+    // A shrinking revision can leave extra spans — drop them
+    while (streamWords.length > words.length) {
+      streamWords.pop().el.remove();
     }
 
-    return `${current} ${suffix}`;
+    // follow the newest word down the page
+    skyPage.scrollTop = skyPage.scrollHeight;
   }
 
-  function mergeTranscriptUpdate(rawText) {
-    const incoming = normalizeTranscriptText(rawText);
+  function joinTranscriptParts(committed, partial) {
+    if (!committed) return partial;
+    if (!partial) return committed;
+    return `${committed} ${partial}`;
+  }
+
+  // Server contract (whisperflow_clone server.py): every message re-transcribes
+  // the ENTIRE current segment buffer, so a partial REPLACES the previous
+  // partial (it grows and revises — never append it). is_partial=false closes
+  // the segment and the server flushes its buffer, so finals are committed and
+  // the next partial starts a fresh segment.
+  function applyTranscriberMessage(data) {
+    const incoming = normalizeTranscriptText(data.text);
     if (!incoming) return;
 
-    if (lastIncomingTranscript && lastIncomingTranscript.endsWith(incoming)) {
-      return;
+    if (data.is_partial === false) {
+      committedText = joinTranscriptParts(committedText, incoming);
+      currentPartial = "";
+    } else {
+      currentPartial = incoming;
     }
 
-    transcribedText = appendTranscriptWithOverlap(transcribedText, incoming);
-    lastIncomingTranscript = incoming;
+    transcribedText = joinTranscriptParts(committedText, currentPartial);
   }
 
   // 1. Initialize WebGL Siri Wave
@@ -463,15 +610,15 @@
   function render() {
     if (!gl) return;
     const t = (Date.now() - timeStart) / 1000.0;
-    
+
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    
+
     gl.uniform2f(uResLoc, canvas.width, canvas.height);
     gl.uniform1f(uTimeLoc, t);
     // Smooth volume updates
     gl.uniform1f(uVolLoc, volumeVal);
-    
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(render);
   }
@@ -491,9 +638,13 @@
       wsTranscriber.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.text) {
-          mergeTranscriptUpdate(data.text);
-          rendererLog(`transcriber text length=${transcribedText.length}`);
+          applyTranscriberMessage(data);
+          rendererLog(`transcriber ${data.is_partial === false ? 'final' : 'partial'} length=${transcribedText.length}`);
           refreshTranscriptDisplay();
+          if (data.is_partial === false) {
+            // live trigger: closed segments hit the automation classifier mid-dictation
+            ipcRenderer.send('vayu-utterance-final', { text: normalizeTranscriptText(data.text) });
+          }
         }
       };
       
@@ -517,8 +668,10 @@
     }
     isStartingRecording = true;
     transcribedText = "";
-    lastIncomingTranscript = "";
-    refreshTranscriptDisplay();
+    committedText = "";
+    currentPartial = "";
+    resetWordStream();
+    setStatusText("");
     rendererLog('startRecording called');
     
     try {
@@ -555,9 +708,14 @@
         }
         const rms = Math.sqrt(sumSquares / inputData.length);
         
-        // Map RMS (0.0 to ~0.5) to reactive visualizer volume scale
-        const targetVolume = Math.min(1.0, rms * 4.5);
-        volumeVal = volumeVal * 0.72 + targetVolume * 0.28; // Smooth, responsive EMA
+        // Map RMS to an exaggerated visualizer volume: hot gain + soft-knee
+        // compression so quiet speech still moves the wave visibly
+        const targetVolume = Math.min(1.6, Math.pow(rms * 6.5, 0.85));
+        if (targetVolume > volumeVal) {
+          volumeVal = volumeVal * 0.45 + targetVolume * 0.55; // fast attack — the wave JUMPS with your voice
+        } else {
+          volumeVal = volumeVal * 0.92 + targetVolume * 0.08; // slow decay — it breathes back down
+        }
         
         const pcmBuffer = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
@@ -577,7 +735,7 @@
     } catch (err) {
       console.error("Recording start failed:", err);
       rendererLog(`recording start failed ${err && err.message ? err.message : err}`);
-      textDisplay.textContent = `Error: ${err.message || err}`;
+      setStatusText(`Error: ${err.message || err}`);
       stopRecording();
     } finally {
       isStartingRecording = false;
@@ -614,7 +772,7 @@
 
     if (!trusted) {
       rendererLog('paste blocked pending Accessibility permission for Vayu.app');
-      textDisplay.textContent = 'Grant Vayu Accessibility, then try again.';
+      setStatusText('Grant Vayu Accessibility, then try again.');
       ipcRenderer.invoke('show-accessibility-help');
       return;
     }
@@ -633,7 +791,7 @@
     });
   }
 
-  function stopAndPaste() {
+  async function stopAndPaste() {
     if (isStoppingRecording) {
       rendererLog('stopAndPaste ignored because stop already in progress');
       return;
@@ -641,29 +799,42 @@
     isStoppingRecording = true;
     rendererLog(`stopAndPaste called textLength=${transcribedText.trim().length}`);
     stopRecording();
-    
-    if (transcribedText.trim()) {
-      // A. Extract tags dynamically using heuristics
-      const tags = tagger.extractTags(transcribedText);
-      
-      // B. Save transcript entry as structured YAML
-      db.saveTranscript(transcribedText, tags);
-      rendererLog(`transcript saved tags=${tags.join(',')}`);
 
-      // C. Copy text to clipboard
-      clipboard.writeText(transcribedText);
-      console.log(`Copied text with tags [${tags.join(', ')}]: "${transcribedText}"`);
-      rendererLog('clipboard write complete');
+    let shouldPaste = false;
+    if (transcribedText.trim()) {
+      // A. Automations verdict: a matched COMMAND is consumed, not pasted
+      let verdict = { consumed: false };
+      try {
+        verdict = await ipcRenderer.invoke('vayu-utterance', { kind: 'paste', text: transcribedText.trim() }) || verdict;
+      } catch (e) {
+        rendererLog(`utterance verdict failed ${e && e.message ? e.message : e}`);
+      }
+
+      // B. Extract tags dynamically using heuristics
+      const tags = tagger.extractTags(transcribedText);
+      if (verdict.consumed) tags.push('command');
+
+      // C. Save transcript entry as structured YAML (commands too — they're history)
+      db.saveTranscript(transcribedText, tags);
+      rendererLog(`transcript saved tags=${tags.join(',')} consumed=${verdict.consumed}${verdict.route ? ` route=${verdict.route}` : ''}`);
+
+      // D. Copy + paste only when it's dictation, not a command
+      if (!verdict.consumed) {
+        clipboard.writeText(transcribedText);
+        console.log(`Copied text with tags [${tags.join(', ')}]: "${transcribedText}"`);
+        rendererLog('clipboard write complete');
+        shouldPaste = true;
+      }
     } else {
       rendererLog('stopAndPaste skipped paste because transcript was empty');
     }
-    
+
     // Hide the overlay before pasting so the previous frontmost app remains the target.
     setTimeout(() => {
       container.classList.remove('visible');
       setTimeout(() => {
         ipcRenderer.send('hide-window');
-        if (transcribedText.trim()) {
+        if (shouldPaste) {
           setTimeout(pasteClipboardIntoFrontmostApp, 350);
         }
         isStoppingRecording = false;
@@ -734,7 +905,7 @@
   });
 
   // Open Dashboard handler
-  dashBtn.addEventListener('click', (e) => {
+  openAppTab.addEventListener('click', (e) => {
     e.stopPropagation();
     ipcRenderer.send('open-dashboard');
   });
