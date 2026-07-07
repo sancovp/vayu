@@ -81,6 +81,41 @@ agentic reaction lives server-side in CAVE's `Automations()` (`EventAutomation` 
   the wake-word analogue of the `contacts:` alias list used for agent names. Longest form
   wins (alternation sorted by length). Tests: `scripts/test_automations.js` (§2b).
 
+### D.1 Vocabulary — bias, corrections, and the bad-term loop
+The `{wake}` fix generalises: `tiny.en` can't say ANY proper noun/jargon term, so Vayu
+carries a vocabulary in the same hot-reloaded `automations.yaml`.
+* **`bias:`** — proper nouns / jargon to steer toward; protected from being rewritten by
+  corrections. (ASPIRATIONAL: also fed to the whisperflow server as hotword/`initial_prompt`
+  bias — needs server support; the reliable path today is corrections below.)
+* **`corrections:`** — `intended -> [heard forms]`, applied to a finished **dictation**
+  transcript *before* it pastes (`applyCorrections`: word-boundary, longest-match-wins,
+  case-preserving). Returns the fixed WORD spans so the renderer can juice them. The
+  command layer runs on RAW text (so a correction never corrupts a `{wake}` capture).
+* **The bad-term loop (ablation):** flag a mis-hearing three ways —
+  1. spoken `"vayu bad translation <term>"` → `flag_bad_term`: appends `<term>` to
+     `bad_terms.jsonl` (append-only, never corrupts the yaml) and **is consumed** (ablated,
+     never pasted);
+  2. spoken `"vayu correct <heard> to <intended>"` → `add_correction`: persists a
+     correction immediately (live on the next utterance);
+  3. dashboard **highlight-to-flag** — select a bad word in any transcript card → a popover
+     offers "⚑ Bad term" (log it) / "✎ Correct to…" (map it). The Vocabulary settings panel
+     lists corrections + flagged terms; each flagged term has an inline "→ intended" fix.
+  Flagged-but-unresolved terms are the queue I (or you) later promote into `bias:`/`corrections:`.
+* IPC: `vayu-apply-corrections`, `vayu-vocabulary-get`, `vayu-flag-bad-term`,
+  `vayu-add-correction`. Tests: `scripts/test_automations.js` (§13–16).
+
+### D.2 Juice — the transcript reacts to your voice
+When the classifier returns a match, the matched word-spans **ignite** in the overlay so
+you feel the system obey. Substrate = the existing per-word span array (`streamWords`).
+* **Command match** → gold `cmd-pulse` + gold sparkle burst over the matched words (the
+  whole line if the exact phrase drifted); the overlay holds ~900ms so the burst lands.
+* **Correction** → aqua `correction-flash` + aqua sparkles over each fixed word; overlay
+  holds ~700ms, then the CLEANED text pastes.
+* **Live** (`on:final` mid-dictation) → main echoes `vayu-match` back the instant a segment
+  closes; the renderer juices that span immediately (`juicePhrase`/`juiceWords`/`spawnSparkles`).
+  RUNTIME-UNVERIFIED: the visual burst needs the mic + `:8181` + the native helper; the
+  match/correction logic underneath is unit-tested.
+
 ### E. CAVE Link (`cave_link.js`)
 * Mirrors the canonical frontend↔CAVE shapes (agent-control-panel pattern):
   publish `POST {base}/cave_agents/{agent}/send {message, ingress:"frontend"}`;

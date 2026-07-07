@@ -754,6 +754,21 @@
         <div id="addAliasStatus" style="font-size: 11.5px; color: var(--ink-soft); margin-top: 6px;"></div>
       </div>
 
+      <div class="setting-row column">
+        <div class="setting-info" style="margin-bottom: 10px;">
+          <div class="setting-name">Vocabulary</div>
+          <div class="setting-detail">The local model is English-only — it can't say "vayu" or "onionmorph", it hears the nearest word. <b>Corrections</b> rewrite those mis-hearings in your transcript before it pastes. Highlight a bad word in any transcript to flag it, or say <i>"vayu bad translation &lt;word&gt;"</i> / <i>"vayu correct &lt;word&gt; to &lt;word&gt;"</i>.</div>
+        </div>
+        <div id="vocabCorrections"></div>
+        <div style="display:flex; gap:8px; margin-top: 12px;">
+          <input type="text" id="corrHeardInput" class="automation-input" placeholder="what it heard (e.g. onion morph)" style="flex:1;">
+          <input type="text" id="corrIntendedInput" class="automation-input" placeholder="what you meant (e.g. onionmorph)" style="flex:1;">
+          <button class="setting-action" id="addCorrectionBtn">Add fix</button>
+        </div>
+        <div id="addCorrectionStatus" style="font-size: 11.5px; color: var(--ink-soft); margin-top: 6px;"></div>
+        <div id="vocabBadTerms" style="margin-top: 14px;"></div>
+      </div>
+
       <div class="setting-row">
         <div class="setting-info">
           <div class="setting-name">Automations file</div>
@@ -763,6 +778,13 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- floating action bar shown when you highlight text in a transcript card -->
+<div id="vocabPopover" style="position:fixed; z-index:9999; display:none; gap:6px; padding:6px; border-radius:10px; background:rgba(20,32,48,0.96); box-shadow:0 8px 30px rgba(0,0,0,0.4); backdrop-filter:blur(8px);">
+  <button id="popFlag" class="setting-action" style="font-size:12px;">⚑ Bad term</button>
+  <button id="popCorrect" class="setting-action" style="font-size:12px;">✎ Correct to…</button>
+  <input type="text" id="popCorrectInput" placeholder="intended word" style="display:none; width:130px; font-size:12px; padding:4px 8px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.1); color:#fff;">
 </div>
 
 <script>
@@ -940,7 +962,126 @@
     }
   });
 
+  // ===================== vocabulary (bias / corrections / flagged) =====================
+  async function loadVocabulary() {
+    let vocab = { bias: [], corrections: {}, badTerms: [] };
+    try { vocab = await ipcRenderer.invoke('vayu-vocabulary-get'); }
+    catch (e) { console.error('vayu-vocabulary-get failed', e); }
+    renderCorrections(vocab.corrections || {});
+    renderBadTerms(vocab.badTerms || []);
+  }
+
+  function renderCorrections(corrections) {
+    const el = document.getElementById('vocabCorrections');
+    const names = Object.keys(corrections);
+    if (!names.length) { el.innerHTML = '<div class="setting-detail">No corrections yet.</div>'; return; }
+    el.innerHTML = names.map((intended) => `
+      <div class="contact-block">
+        <div class="contact-name">${escapeHtmlLocal(intended)}</div>
+        <div class="contact-aliases">
+          ${(corrections[intended] || []).map((h) => `<span class="alias-chip">${escapeHtmlLocal(h)}</span>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderBadTerms(badTerms) {
+    const el = document.getElementById('vocabBadTerms');
+    if (!badTerms.length) { el.innerHTML = ''; return; }
+    // newest first, de-dupe by heard term
+    const seen = new Set();
+    const rows = badTerms.slice().reverse().filter((b) => {
+      const k = (b.heard || '').toLowerCase();
+      if (seen.has(k)) return false; seen.add(k); return true;
+    });
+    el.innerHTML = `<div class="setting-detail" style="margin-bottom:6px;">Flagged, awaiting a fix — type the intended word and press Enter:</div>` +
+      rows.map((b) => `
+        <div class="contact-block" style="display:flex; align-items:center; gap:8px;">
+          <span class="alias-chip">${escapeHtmlLocal(b.heard)}</span>
+          <span style="color:var(--ink-soft);">→</span>
+          <input type="text" class="automation-input badterm-fix" data-heard="${escapeHtmlLocal(b.heard)}" placeholder="intended word" style="flex:1; min-width:0;">
+        </div>
+      `).join('');
+    el.querySelectorAll('.badterm-fix').forEach((inp) => {
+      inp.addEventListener('keydown', async (ev) => {
+        if (ev.key !== 'Enter') return;
+        const intended = inp.value.trim();
+        const heard = inp.dataset.heard;
+        if (!intended) return;
+        const res = await ipcRenderer.invoke('vayu-add-correction', { intended, heard });
+        if (res && res.ok) { loadVocabulary(); }
+      });
+    });
+  }
+
+  document.getElementById('addCorrectionBtn').addEventListener('click', async () => {
+    const heard = document.getElementById('corrHeardInput').value.trim();
+    const intended = document.getElementById('corrIntendedInput').value.trim();
+    const status = document.getElementById('addCorrectionStatus');
+    if (!heard || !intended) { status.textContent = 'Enter both what it heard and what you meant.'; return; }
+    status.textContent = 'Adding…';
+    try {
+      const res = await ipcRenderer.invoke('vayu-add-correction', { intended, heard });
+      if (res && res.ok) {
+        status.textContent = `Added "${heard}" → ${intended}.`;
+        document.getElementById('corrHeardInput').value = '';
+        document.getElementById('corrIntendedInput').value = '';
+        renderCorrections(res.corrections || {});
+      } else { status.textContent = (res && res.error) || 'Failed to add correction.'; }
+    } catch (e) { status.textContent = `Failed: ${e.message}`; }
+  });
+
+  // --- highlight-to-flag: select text in any transcript card -> flag / correct ---
+  const vocabPopover = document.getElementById('vocabPopover');
+  const popCorrectInput = document.getElementById('popCorrectInput');
+  let popSelection = '';
+
+  function hidePopover() {
+    vocabPopover.style.display = 'none';
+    popCorrectInput.style.display = 'none';
+    popCorrectInput.value = '';
+    popSelection = '';
+  }
+
+  document.addEventListener('mouseup', (ev) => {
+    if (vocabPopover.contains(ev.target)) return; // don't dismiss when clicking the bar
+    const sel = window.getSelection();
+    const text = sel ? sel.toString().trim() : '';
+    const card = ev.target.closest && ev.target.closest('.card-text');
+    if (text && text.length <= 60 && card) {
+      popSelection = text;
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      vocabPopover.style.display = 'flex';
+      vocabPopover.style.left = `${Math.max(8, rect.left)}px`;
+      vocabPopover.style.top = `${Math.max(8, rect.top - 46)}px`;
+    } else {
+      hidePopover();
+    }
+  });
+
+  document.getElementById('popFlag').addEventListener('click', async () => {
+    if (!popSelection) return;
+    await ipcRenderer.invoke('vayu-flag-bad-term', { term: popSelection, context: 'flagged from transcript' });
+    hidePopover();
+    loadVocabulary();
+  });
+
+  document.getElementById('popCorrect').addEventListener('click', () => {
+    popCorrectInput.style.display = 'inline-block';
+    popCorrectInput.focus();
+  });
+
+  popCorrectInput.addEventListener('keydown', async (ev) => {
+    if (ev.key !== 'Enter') return;
+    const intended = popCorrectInput.value.trim();
+    if (!intended || !popSelection) return;
+    await ipcRenderer.invoke('vayu-add-correction', { intended, heard: popSelection });
+    hidePopover();
+    loadVocabulary();
+  });
+
   loadAutomations();
+  loadVocabulary();
 
   // ===================== the ribbon =====================
   // The latest dictation rides a waving band across the sky, wisprflow-style.

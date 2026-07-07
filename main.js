@@ -527,6 +527,30 @@ ipcMain.handle('vayu-automations-add-alias', (event, data) => {
   return automations.addContactAlias(canonical, alias);
 });
 
+// ---- Vocabulary: bias terms + corrections + flagged bad terms ----
+// The renderer applies corrections to a finished (non-command) transcript before
+// pasting, and juices the fixed spans. The dashboard reads/edits the same data.
+ipcMain.handle('vayu-apply-corrections', (event, data) => {
+  if (!automations) return { text: (data && data.text) || '', spans: [] };
+  return automations.applyCorrections((data && data.text) || '');
+});
+
+ipcMain.handle('vayu-vocabulary-get', () => {
+  if (!automations) return { bias: [], corrections: {}, badTerms: [] };
+  return automations.getVocabulary();
+});
+
+ipcMain.handle('vayu-flag-bad-term', (event, data) => {
+  if (!automations) return { ok: false, error: 'automations not initialized' };
+  return automations.flagBadTerm((data && data.term) || '', (data && data.context) || '');
+});
+
+ipcMain.handle('vayu-add-correction', (event, data) => {
+  if (!automations) return { ok: false, error: 'automations not initialized' };
+  const { intended, heard } = data || {};
+  return automations.addCorrection(intended, heard);
+});
+
 // Full utterance at paste time — the renderer awaits the verdict:
 // consumed=true means it was a command, so the renderer must not paste it.
 ipcMain.handle('vayu-utterance', async (event, data) => {
@@ -540,12 +564,19 @@ ipcMain.handle('vayu-utterance', async (event, data) => {
 });
 
 // Per-segment finals while still dictating — fire-and-forget live triggers.
+// On a match, echo the matched span back so the overlay juices it the instant
+// the recognizer closes the segment (that's the "it heard my command" beat).
 ipcMain.on('vayu-utterance-final', (event, data) => {
-  if (automations) {
-    automations.handle('final', (data && data.text) || '').catch(e => {
-      appendRuntimeLog(`final trigger failed ${e.message}`);
-    });
-  }
+  if (!automations) return;
+  automations.handle('final', (data && data.text) || '').then((verdict) => {
+    if (verdict && verdict.match && !event.sender.isDestroyed()) {
+      event.sender.send('vayu-match', {
+        text: verdict.match.text, route: verdict.route, action: verdict.action, kind: 'final',
+      });
+    }
+  }).catch(e => {
+    appendRuntimeLog(`final trigger failed ${e.message}`);
+  });
 });
 
 ipcMain.handle('check-accessibility-trust', (event, prompt) => {

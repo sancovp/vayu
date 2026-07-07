@@ -214,6 +214,53 @@
     to   { translate: 0 1.2px; }
   }
 
+  /* ===== JUICE: the system reacting to your voice ===== */
+  /* A matched automation command — the words ignite gold as they're consumed. */
+  .wind-word.cmd-match {
+    color: #fff7d6;
+    text-shadow: 0 0 6px rgba(255, 214, 90, 0.95),
+                 0 0 22px rgba(255, 180, 40, 0.85),
+                 0 0 40px rgba(255, 150, 0, 0.6);
+    animation: cmd-pulse 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  @keyframes cmd-pulse {
+    0%   { transform: scale(1);    filter: brightness(1); }
+    22%  { transform: scale(1.28); filter: brightness(1.9); }
+    100% { transform: scale(1.06); filter: brightness(1.12); }
+  }
+
+  /* A vocabulary correction — the fixed word snaps in on a cool aqua flash. */
+  .wind-word.correction {
+    color: #d8fff0;
+    text-shadow: 0 0 6px rgba(80, 255, 200, 0.95),
+                 0 0 20px rgba(30, 230, 180, 0.8);
+    animation: correction-flash 0.85s ease-out both;
+  }
+  @keyframes correction-flash {
+    0%   { transform: translateY(-3px) scale(1.2); filter: brightness(2); letter-spacing: 0.06em; }
+    100% { transform: none; filter: none; letter-spacing: normal; }
+  }
+
+  /* Sparkle particles, spawned over juiced words, positioned in #sky-wrap. */
+  .vayu-spark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 40;
+    background: radial-gradient(circle, #fffbe6 0%, rgba(255,210,90,0.9) 45%, rgba(255,160,20,0) 72%);
+    animation: spark-fly var(--dur, 0.8s) ease-out forwards;
+  }
+  .vayu-spark.aqua {
+    background: radial-gradient(circle, #eafff8 0%, rgba(90,255,210,0.9) 45%, rgba(30,220,180,0) 72%);
+  }
+  @keyframes spark-fly {
+    0%   { opacity: 0; transform: translate(0, 0) scale(0.3); }
+    18%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--dx, 0), var(--dy, -26px)) scale(1.05); }
+  }
+
   #status-text {
     position: absolute;
     bottom: 8px;
@@ -534,6 +581,74 @@
     return `${committed} ${partial}`;
   }
 
+  // ===== JUICE: light up the words the system just acted on =====
+  const skyWrap = document.getElementById('sky-wrap');
+
+  // Locate a phrase within the currently displayed words -> [startIdx, endIdx]
+  // (inclusive), or null. Punctuation/case-insensitive so a matched command
+  // ("Hey Vayu, open the dashboard.") lines up with the drifting word spans.
+  function findWordRange(sub) {
+    const norm = (s) => normalizeTranscriptText(s).toLowerCase().replace(/[^\w\s]/g, '');
+    const needle = norm(sub).split(' ').filter(Boolean);
+    if (!needle.length) return null;
+    const hay = streamWords.map((w) => norm(w.text));
+    for (let i = 0; i + needle.length <= hay.length; i++) {
+      let ok = true;
+      for (let j = 0; j < needle.length; j++) {
+        if (hay[i + j] !== needle[j]) { ok = false; break; }
+      }
+      if (ok) return [i, i + needle.length - 1];
+    }
+    return null;
+  }
+
+  // Spawn a burst of sparkle particles over an element's bounding box.
+  function spawnSparkles(el, aqua, count = 7) {
+    if (!el || !skyWrap) return;
+    const wrap = skyWrap.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    for (let k = 0; k < count; k++) {
+      const s = document.createElement('div');
+      s.className = 'vayu-spark' + (aqua ? ' aqua' : '');
+      const x = r.left - wrap.left + Math.random() * r.width;
+      const y = r.top - wrap.top + r.height * 0.5;
+      s.style.left = `${x}px`;
+      s.style.top = `${y}px`;
+      s.style.setProperty('--dx', `${(Math.random() - 0.5) * 46}px`);
+      s.style.setProperty('--dy', `${-18 - Math.random() * 30}px`);
+      s.style.setProperty('--dur', `${0.6 + Math.random() * 0.5}s`);
+      skyWrap.appendChild(s);
+      setTimeout(() => s.remove(), 1200);
+    }
+  }
+
+  // Highlight + sparkle a word range. kind: 'command' (gold) | 'correction' (aqua).
+  function juiceWords(startIdx, endIdx, kind) {
+    const cls = kind === 'correction' ? 'correction' : 'cmd-match';
+    for (let i = startIdx; i <= endIdx && i < streamWords.length; i++) {
+      const el = streamWords[i] && streamWords[i].el;
+      if (!el) continue;
+      el.classList.remove(cls);
+      void el.offsetWidth; // restart the animation if re-juiced
+      el.classList.add(cls);
+      spawnSparkles(el, kind === 'correction');
+    }
+  }
+
+  // Juice a matched phrase found anywhere in the current transcript. Falls back
+  // to lighting the whole line for a consumed command whose exact text drifted.
+  function juicePhrase(text, kind, lightAllIfMissing) {
+    const range = findWordRange(text || '');
+    if (range) { juiceWords(range[0], range[1], kind); return true; }
+    if (lightAllIfMissing && streamWords.length) { juiceWords(0, streamWords.length - 1, kind); return true; }
+    return false;
+  }
+
+  // Live match echoed from main the instant a segment closes mid-dictation.
+  ipcRenderer.on('vayu-match', (event, m) => {
+    if (m && m.text) juicePhrase(m.text, m.action === 'add_correction' ? 'correction' : 'command', false);
+  });
+
   // Server contract (whisperflow_clone server.py): every message re-transcribes
   // the ENTIRE current segment buffer, so a partial REPLACES the previous
   // partial (it grows and revises — never append it). is_partial=false closes
@@ -801,6 +916,7 @@
     stopRecording();
 
     let shouldPaste = false;
+    let juiceHoldMs = 120; // extended when a command/correction juices the words
     if (transcribedText.trim()) {
       // A. Automations verdict: a matched COMMAND is consumed, not pasted
       let verdict = { consumed: false };
@@ -818,10 +934,35 @@
       db.saveTranscript(transcribedText, tags);
       rendererLog(`transcript saved tags=${tags.join(',')} consumed=${verdict.consumed}${verdict.route ? ` route=${verdict.route}` : ''}`);
 
-      // D. Copy + paste only when it's dictation, not a command
-      if (!verdict.consumed) {
-        clipboard.writeText(transcribedText);
-        console.log(`Copied text with tags [${tags.join(', ')}]: "${transcribedText}"`);
+      if (verdict.consumed) {
+        // A COMMAND — ignite the words as they're consumed (not pasted). Light
+        // the matched span if we can find it, else the whole line.
+        juicePhrase(verdict.match && verdict.match.text ? verdict.match.text : transcribedText.trim(),
+                    verdict.action === 'add_correction' ? 'correction' : 'command', true);
+        juiceHoldMs = 900; // let the burst land before the overlay leaves
+      } else {
+        // D. DICTATION — apply the vocabulary corrections, juice each fix, then
+        // paste the CLEANED text (not the raw mis-transcription).
+        let outText = transcribedText.trim();
+        try {
+          const corrected = await ipcRenderer.invoke('vayu-apply-corrections', { text: outText });
+          if (corrected && corrected.text) {
+            outText = corrected.text;
+            if (corrected.spans && corrected.spans.length) {
+              committedText = corrected.text;
+              currentPartial = "";
+              refreshTranscriptDisplay();
+              // next frame so the swapped word spans exist before we light them
+              requestAnimationFrame(() => corrected.spans.forEach((s) => juiceWords(s.wordStart, s.wordEnd, 'correction')));
+              juiceHoldMs = 700;
+              rendererLog(`corrections applied: ${corrected.spans.map((s) => `${s.from}->${s.to}`).join(', ')}`);
+            }
+          }
+        } catch (e) {
+          rendererLog(`apply-corrections failed ${e && e.message ? e.message : e}`);
+        }
+        clipboard.writeText(outText);
+        console.log(`Copied text with tags [${tags.join(', ')}]: "${outText}"`);
         rendererLog('clipboard write complete');
         shouldPaste = true;
       }
@@ -829,7 +970,8 @@
       rendererLog('stopAndPaste skipped paste because transcript was empty');
     }
 
-    // Hide the overlay before pasting so the previous frontmost app remains the target.
+    // Hide the overlay before pasting so the previous frontmost app remains the
+    // target. When something juiced, hold a beat so the user SEES the reaction.
     setTimeout(() => {
       container.classList.remove('visible');
       setTimeout(() => {
@@ -839,7 +981,7 @@
         }
         isStoppingRecording = false;
       }, 300);
-    }, 120);
+    }, juiceHoldMs);
   }
 
   // 3. Coordinate with native Electron global-shortcut-event (Control + Space)

@@ -67,6 +67,24 @@ wake:
   - vayou
   - wahoo
 
+# Vocabulary bias — proper nouns / jargon the recognizer keeps missing. These
+# are (a) protected from being rewritten by corrections and (b) surfaced to the
+# transcription server as hotword bias where supported. Add your names here.
+bias:
+  - Vayu
+  - CAVE
+  - onionmorph
+
+# Corrections — misheard -> intended, applied to the transcript AFTER
+# recognition (word-boundary, case-preserving, longest-match wins). This is the
+# reliable in-app vocabulary fix: tiny.en can't say "onionmorph", so teach Vayu
+# what it says instead. Grows via "vayu correct <heard> to <intended>" and the
+# dashboard highlight-to-flag UI. Shape mirrors contacts: canonical -> [heard].
+corrections:
+  onionmorph:
+    - onion morph
+    - union morph
+
 # Canonical contact name -> aliases/nicknames (what you might actually say,
 # including likely mis-transcriptions). Add a nickname by adding a line here.
 contacts:
@@ -91,6 +109,20 @@ routes:
     on: paste
     action: cave.send
     args: { agent: "{agent}", message: "{msg}" }
+    consume: true
+
+  - name: flag bad translation
+    match: "^{wake},? (?:bad|wrong)(?: (?:translation|transcription|term|word))?[,:]? (?<term>.+?)[.!?]*$"
+    on: paste
+    action: flag_bad_term
+    args: { term: "{term}" }
+    consume: true
+
+  - name: correct a term
+    match: "^{wake},? (?:correct|fix|change)[,:]? (?<from>.+?) (?:to|as|into|with) (?<to>.+?)[.!?]*$"
+    on: paste
+    action: add_correction
+    args: { from: "{from}", to: "{to}" }
     consume: true
 
   - name: done sound
@@ -134,11 +166,13 @@ class VayuAutomations {
    */
   constructor({ dataDir, log, actions, caveLink }) {
     this.configPath = path.join(dataDir, 'automations.yaml');
+    this.badTermsPath = path.join(dataDir, 'bad_terms.jsonl'); // append-only flag log
     this.log = log || (() => {});
     this.actions = actions || {};
     this.caveLink = caveLink || null;
-    this.config = { cave: {}, contacts: {}, routes: [] };
+    this.config = { cave: {}, contacts: {}, wake: [], bias: [], corrections: {}, routes: [] };
     this._rawDoc = { cave: {}, contacts: {}, routes: [] };
+    this._correctionMatchers = []; // [{ intended, re }] longest-first
     this._watchDebounce = null;
     this._liveAgents = {}; // best-effort cache from CAVE's /cave_agents, supplementary only
   }
@@ -180,12 +214,34 @@ class VayuAutomations {
           return null;
         }
       }).filter(Boolean);
+      const bias = Array.isArray(raw.bias) ? raw.bias.map((b) => String(b)) : [];
+      const corrections = (raw.corrections && typeof raw.corrections === 'object') ? raw.corrections : {};
+      this._correctionMatchers = this._buildCorrectionMatchers(corrections);
       this._rawDoc = raw;
-      this.config = { cave: raw.cave || {}, contacts: raw.contacts || {}, wake, routes };
-      this.log(`automations: loaded ${routes.length} routes, ${Object.keys(this.config.contacts).length} contacts, ${wake.length} wake forms (cave ${this.config.cave.enabled ? 'enabled' : 'disabled'})`);
+      this.config = { cave: raw.cave || {}, contacts: raw.contacts || {}, wake, bias, corrections, routes };
+      this.log(`automations: loaded ${routes.length} routes, ${Object.keys(this.config.contacts).length} contacts, ${wake.length} wake forms, ${Object.keys(corrections).length} corrections, ${bias.length} bias terms (cave ${this.config.cave.enabled ? 'enabled' : 'disabled'})`);
     } catch (e) {
       this.log(`automations: config load failed ${e.message}`);
     }
+  }
+
+  /** Compile the corrections map (intended -> [heard forms]) into ordered
+   * word-boundary regex matchers, longest heard-form first so a multiword
+   * mishearing ("onion morph") wins over any single-word one. */
+  _buildCorrectionMatchers(corrections) {
+    const rows = [];
+    for (const [intended, heardForms] of Object.entries(corrections || {})) {
+      for (const heard of (Array.isArray(heardForms) ? heardForms : [heardForms])) {
+        const term = String(heard || '').trim();
+        if (!term) continue;
+        rows.push({ intended: String(intended), heard: term });
+      }
+    }
+    rows.sort((a, b) => b.heard.length - a.heard.length);
+    return rows.map(({ intended, heard }) => {
+      const esc = heard.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+      return { intended, re: new RegExp(`\\b${esc}\\b`, 'gi') };
+    });
   }
 
   /** Build a non-capturing regex alternation from the wake-word forms, longest
@@ -280,6 +336,122 @@ class VayuAutomations {
     return { ok: true, contacts: this.config.contacts };
   }
 
+  /** Apply the corrections dictionary to a finished transcript. Returns the
+   * rewritten text plus the WORD-index spans that changed, so the renderer can
+   * highlight/juice each fix. Non-destructive: recognition text in, clean text
+   * out — the {wake} command layer is separate (it runs on raw text). */
+  applyCorrections(text) {
+    const src = String(text || '');
+    if (!src || !this._correctionMatchers.length) return { text: src, spans: [] };
+
+    // 1. Collect every match across all matchers over the ORIGINAL text.
+    const hits = [];
+    for (const { intended, re } of this._correctionMatchers) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(src)) !== null) {
+        hits.push({ start: m.index, end: m.index + m[0].length, from: m[0], intended });
+        if (m.index === re.lastIndex) re.lastIndex++; // guard zero-width
+      }
+    }
+    if (!hits.length) return { text: src, spans: [] };
+
+    // 2. Resolve overlaps: earliest start wins, then longest match.
+    hits.sort((a, b) => (a.start - b.start) || ((b.end - b.start) - (a.end - a.start)));
+    const kept = [];
+    let cursor = -1;
+    for (const h of hits) {
+      if (h.start >= cursor) { kept.push(h); cursor = h.end; }
+    }
+
+    // 3. Rebuild the string, preserving the capitalisation of the heard form,
+    //    and record each replacement's span in FINAL-text word coordinates.
+    let out = '';
+    let last = 0;
+    const spans = [];
+    for (const h of kept) {
+      out += src.slice(last, h.start);
+      const to = this._matchCase(h.from, h.intended);
+      const wordStart = this._wordIndexAt(out); // words before this point
+      out += to;
+      const wordEnd = wordStart + to.trim().split(/\s+/).length - 1;
+      spans.push({ wordStart, wordEnd, from: h.from, to });
+      last = h.end;
+    }
+    out += src.slice(last);
+    return { text: out, spans };
+  }
+
+  /** Count how many whole words precede the given (end-of-string) build point. */
+  _wordIndexAt(prefix) {
+    const t = prefix.replace(/\s+$/, '');
+    return t ? t.split(/\s+/).length : 0;
+  }
+
+  /** Carry the heard form's casing onto the intended word (ALLCAPS / Title / as-is). */
+  _matchCase(from, intended) {
+    if (from && from === from.toUpperCase() && from !== from.toLowerCase()) return intended.toUpperCase();
+    if (from && from[0] === from[0].toUpperCase()) return intended.charAt(0).toUpperCase() + intended.slice(1);
+    return intended;
+  }
+
+  /** Flag a mis-transcribed term for later resolution. Append-only jsonl so a
+   * flood of flags can never corrupt the human-tuned yaml. This is the ablate
+   * path: the spoken "vayu bad translation X" is consumed (never pasted), X is
+   * logged, and you (or Claude) later turn it into a bias/correction entry. */
+  flagBadTerm(term, context) {
+    const clean = String(term || '').trim();
+    if (!clean) return { ok: false, error: 'empty term' };
+    const entry = { heard: clean, context: String(context || '').trim(), at: new Date().toISOString() };
+    try {
+      fs.appendFileSync(this.badTermsPath, JSON.stringify(entry) + '\n');
+      this.log(`automations: flagged bad term "${clean}" -> ${this.badTermsPath}`);
+      return { ok: true, entry };
+    } catch (e) {
+      this.log(`automations: flagBadTerm failed ${e.message}`);
+      return { ok: false, error: e.message };
+    }
+  }
+
+  /** Read back the flagged (still-unresolved) bad terms. */
+  getBadTerms() {
+    try {
+      if (!fs.existsSync(this.badTermsPath)) return [];
+      return fs.readFileSync(this.badTermsPath, 'utf8').split('\n').filter(Boolean)
+        .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    } catch { return []; }
+  }
+
+  /** Add a correction (heard -> intended) and persist it. Creates the intended
+   * entry if new. Mirrors addContactAlias. Used by the spoken "correct X to Y"
+   * command and the dashboard highlight-to-fix UI. */
+  addCorrection(intended, heard) {
+    const key = String(intended || '').trim();
+    const term = String(heard || '').trim().toLowerCase();
+    if (!key || !term) return { ok: false, error: 'intended and heard are both required' };
+
+    const doc = yaml.load(fs.readFileSync(this.configPath, 'utf8')) || {};
+    doc.corrections = doc.corrections || {};
+    doc.corrections[key] = doc.corrections[key] || [];
+    if (!doc.corrections[key].map((a) => String(a).toLowerCase()).includes(term)) {
+      doc.corrections[key].push(term);
+    }
+    fs.writeFileSync(this.configPath, yaml.dump(doc, { lineWidth: -1 }));
+    this.log(`automations: added correction "${term}" -> "${key}"`);
+    this.load();
+    return { ok: true, corrections: this.config.corrections };
+  }
+
+  /** Bias terms surfaced to the recognizer / protected from correction. */
+  getBias() {
+    return this.config.bias || [];
+  }
+
+  /** Full vocabulary view for the dashboard UI. */
+  getVocabulary() {
+    return { bias: this.getBias(), corrections: this.config.corrections || {}, badTerms: this.getBadTerms() };
+  }
+
   getContacts() {
     return this.config.contacts;
   }
@@ -297,8 +469,9 @@ class VayuAutomations {
     for (const route of this.config.routes) {
       const routeOn = route.on || 'paste';
       if (routeOn !== kind) continue;
+      route._re.lastIndex = 0;
       const m = route._re.exec(clean);
-      if (m) return { route, groups: m.groups || {} };
+      if (m) return { route, groups: m.groups || {}, match: { text: m[0], index: m.index } };
     }
     return null;
   }
@@ -317,22 +490,31 @@ class VayuAutomations {
     const hit = this.classify(kind, text);
     if (!hit) return { consumed: false, route: null };
 
-    const { route, groups } = hit;
+    const { route, groups, match } = hit;
     const args = {};
     for (const [k, v] of Object.entries(route.args || {})) {
       args[k] = this._subst(v, groups, text);
     }
     this.log(`automations: route "${route.name}" matched (${kind}) action=${route.action}`);
+    // match info travels back so the renderer can juice the matched span.
+    const verdict = { consumed: !!route.consume, route: route.name, action: route.action, match };
 
     try {
       if (route.action === 'open_dashboard' && this.actions.open_dashboard) {
         this.actions.open_dashboard();
+      } else if (route.action === 'flag_bad_term') {
+        const res = this.flagBadTerm(args.term, text);
+        return { ...verdict, badTerm: res.entry, error: res.ok ? undefined : res.error };
+      } else if (route.action === 'add_correction') {
+        const res = this.addCorrection(args.to, args.from);
+        return { ...verdict, correction: { from: args.from, to: args.to }, error: res.ok ? undefined : res.error };
       } else if (route.action === 'cave.send' && this.caveLink) {
         const resolved = this.resolveContact(args.agent);
         if (!resolved) {
           this.log(`automations: route "${route.name}" — unknown contact "${args.agent}", not dispatching (fail-safe)`);
           return { consumed: false, route: route.name, error: `unknown contact "${args.agent}"` };
         }
+        verdict.agent = resolved;
         await this.caveLink.sendToAgent(resolved, args.message || text);
       } else if (route.action === 'play_sound' && route.args && route.args.sound) {
         const soundPath = this._subst(route.args.sound, groups, text);
@@ -357,10 +539,10 @@ class VayuAutomations {
     } catch (e) {
       this.log(`automations: dispatch "${route.name}" failed ${e.message}`);
       // A failed COMMAND should not silently turn into pasted text
-      return { consumed: !!route.consume, route: route.name, error: e.message };
+      return { ...verdict, error: e.message };
     }
 
-    return { consumed: !!route.consume, route: route.name };
+    return verdict;
   }
 }
 

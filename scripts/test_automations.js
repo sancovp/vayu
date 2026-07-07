@@ -114,7 +114,75 @@ routes:
   assert.strictEqual(v.consumed, false); // no consume flag on this route
   assert.deepStrictEqual(calls.caveSends[4], { agent: 'scribe', message: 'buy more RAM' });
 
+  // (reset to a vocabulary-carrying config — test 12 left a minimal one)
+  fs.writeFileSync(path.join(tmpDir, 'automations.yaml'), `
+wake: [vayu, vite, value]
+bias: [Vayu, CAVE]
+corrections:
+  onionmorph: [onion morph, union morph]
+routes:
+  - name: flag bad translation
+    match: "^{wake},? (?:bad|wrong)(?: (?:translation|transcription|term|word))?[,:]? (?<term>.+?)[.!?]*$"
+    on: paste
+    action: flag_bad_term
+    args: { term: "{term}" }
+    consume: true
+  - name: correct a term
+    match: "^{wake},? (?:correct|fix|change)[,:]? (?<from>.+?) (?:to|as|into|with) (?<to>.+?)[.!?]*$"
+    on: paste
+    action: add_correction
+    args: { from: "{from}", to: "{to}" }
+    consume: true
+  - name: open vayu
+    match: "^(hey,? )?{wake},? open( the)?( dashboard| app| vayu)?[.!]?$"
+    on: paste
+    action: open_dashboard
+    consume: true
+`);
+  auto.load();
+
+  // 13. VOCABULARY — corrections rewrite a misheard term and report the fixed
+  // word span (for juice). Multiword mishearing collapses to one word.
+  {
+    const r = auto.applyCorrections('please open onion morph now');
+    assert.strictEqual(r.text, 'please open onionmorph now', 'multiword correction applied');
+    assert.strictEqual(r.spans.length, 1, 'one correction span reported');
+    assert.deepStrictEqual([r.spans[0].wordStart, r.spans[0].wordEnd], [2, 2], 'span points at the fixed word');
+    assert.strictEqual(r.spans[0].to, 'onionmorph');
+  }
+  // case is carried from the heard form onto the intended word
+  assert.strictEqual(auto.applyCorrections('Onion Morph rocks').text, 'Onionmorph rocks', 'title-case preserved');
+  // no correction -> text unchanged, no spans
+  assert.deepStrictEqual(auto.applyCorrections('nothing to fix here'), { text: 'nothing to fix here', spans: [] });
+
+  // 14. SPOKEN "vayu bad translation X" -> flagged to jsonl, consumed (ablated)
+  {
+    const r = await auto.handle('paste', 'Vite bad translation onion morph');
+    assert.strictEqual(r.consumed, true, 'bad-translation command is consumed (ablated, not pasted)');
+    assert.strictEqual(r.action, 'flag_bad_term');
+    const flagged = auto.getBadTerms();
+    assert.ok(flagged.some((e) => e.heard === 'onion morph'), 'term appended to bad_terms.jsonl');
+  }
+
+  // 15. SPOKEN "vayu correct X to Y" -> persists a correction, immediately live
+  {
+    const r = await auto.handle('paste', 'Value correct see ave to CAVE');
+    assert.strictEqual(r.consumed, true, 'correct command consumed');
+    assert.strictEqual(r.action, 'add_correction');
+    assert.ok(auto.config.corrections.CAVE, 'new correction key persisted');
+    // and it now rewrites transcripts
+    assert.strictEqual(auto.applyCorrections('tell see ave to run').text, 'tell CAVE to run');
+  }
+
+  // 16. a real command reports its matched span back for juicing
+  {
+    calls.dashboard = 0;
+    const r = await auto.handle('paste', 'Hey Vayu, open the dashboard.');
+    assert.strictEqual(r.consumed, true);
+    assert.ok(r.match && typeof r.match.text === 'string', 'command match span returned for juice');
+  }
+
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  console.log('Automation classifier tests passed (contacts, fuzzy matching, fail-safe, play_sound, alias persistence)');
+  console.log('Automation classifier tests passed (contacts, fuzzy matching, fail-safe, play_sound, alias persistence, wake homophones, corrections, bad-term flag, spoken correct)');
   process.exit(0); // the config fs.watch keeps the loop alive; tests are done
 })().catch(e => { console.error(e); process.exit(1); });
