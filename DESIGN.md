@@ -57,12 +57,26 @@ agentic reaction lives server-side in CAVE's `Automations()` (`EventAutomation` 
 * **Audio:** ScriptProcessorNode downsample → int16 PCM 16kHz → ws://localhost:8181/ws.
   Volume envelope: fast attack / slow decay driving the shader (`uVolume`).
 
-### C. Transcription Server (`whisperflow_clone`, FastAPI :8181)
+### C. Transcription Server (`whisperflow_clone`, FastAPI :8181) — VENDORED
+* **Now lives INSIDE this repo** (`./whisperflow_clone`, OpenAI whisper + FastAPI, model
+  `tiny.en`). Was a gitless orphan in a scratch dir; vendored 2026-07-06 so the STT engine
+  ships and versions with Vayu. `.venv`/`__pycache__`/`*.pt` weights are gitignored (source
+  tracked; weights auto-download on first load).
+* **Vayu owns its lifecycle** (`main.js` `startWhisperServer`): health-checks `:8181`, and
+  if nothing's up, bootstraps a venv in the **writable data dir** (`<DATA_DIR>/stt-venv`,
+  NOT inside the signed bundle — so setup can't break the signature), pip-installs
+  `requirements.txt` (first run, minutes), then spawns uvicorn; killed on quit. Manual
+  fallback still works: `whisperflow_clone/run.sh -setup` / `-server`.
+* **Vocabulary bias (`initial_prompt`) — the ROOT fix.** Vayu derives a bias prompt from
+  `bias:` + correction targets and writes `<DATA_DIR>/whisper_bias.txt` on every automations
+  reload (`writeWhisperBias`). The server reads it (`src/bias.py`, stdlib, mtime-cached) and
+  passes it to `model.transcribe(initial_prompt=…)`, steering tiny.en toward the vocabulary
+  instead of the nearest English word. This is the source-level complement to the post-ASR
+  corrections in §D.1. Server env `VAYU_DATA_DIR` points at the same data dir Vayu uses.
 * Tumbling buffer; whole-buffer re-transcribe per ~250ms of new audio; segment closes on
   2 stable passes OR ≥0.6s trailing silence OR 15s cap → buffer flush.
 * **Voiced gate (2026-07-04):** buffers with <0.25s of non-silent audio are never
   transcribed — kills whisper tiny.en's silence hallucination ("Thank you.").
-* Launch: `whisperflow_clone/run.sh -server` (uvicorn, own .venv).
 
 ### D. Automations (`vayu_automations.js` + `~/Library/Application Support/Vayu/automations.yaml`)
 * YAML route table, hot-reloaded via fs.watch; seeded with defaults on first run.

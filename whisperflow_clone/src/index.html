@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Vayu local real-time speech dictation workspace.">
+    <title>Vayu | Real-Time Speech Dictation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0a0b10 0%, #121420 100%);
+            --panel-bg: rgba(18, 20, 36, 0.7);
+            --border-glow: rgba(124, 58, 237, 0.2);
+            --accent-primary: #7c3aed;
+            --accent-secondary: #4f46e5;
+            --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --accent-gradient-active: linear-gradient(135deg, #ef4444 0%, #f43f5e 100%);
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --card-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+        }
+
+        .ambient-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(0,0,0,0) 70%);
+            top: -100px;
+            left: -100px;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .ambient-glow-2 {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(79, 70, 229, 0.12) 0%, rgba(0,0,0,0) 70%);
+            bottom: -100px;
+            right: -100px;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: var(--card-shadow);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            position: relative;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            right: -1px;
+            bottom: -1px;
+            border-radius: 24px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02) 50%, rgba(124, 58, 237, 0.1));
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #f9fafb 50%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.connected {
+            background: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+
+        .status-dot.connecting {
+            background: #f59e0b;
+            box-shadow: 0 0 10px #f59e0b;
+            animation: pulse-yellow 1.5s infinite;
+        }
+
+        @keyframes pulse-yellow {
+            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+
+        .transcription-window {
+            background: rgba(8, 9, 16, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            min-height: 200px;
+            max-height: 320px;
+            overflow-y: auto;
+            padding: 24px;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: #d1d5db;
+            transition: border-color 0.3s ease;
+        }
+
+        .transcription-window:focus-within {
+            border-color: var(--accent-primary);
+        }
+
+        .final-text {
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .partial-text {
+            color: #b9a6f7;
+            font-style: italic;
+            border-bottom: 1px dotted rgba(124, 58, 237, 0.6);
+        }
+
+        /* WebGL Wave Area */
+        .wave-container {
+            width: 100%;
+            height: 80px;
+            background: rgba(8, 9, 16, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #gl-wave {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .mic-btn-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mic-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 25px rgba(124, 58, 237, 0.3);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 5;
+        }
+
+        .mic-btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 12px 30px rgba(124, 58, 237, 0.45);
+        }
+
+        .mic-btn:active {
+            transform: scale(0.95);
+        }
+
+        .mic-btn.recording {
+            background: var(--accent-gradient-active);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.5);
+            animation: pulse-recording 2s infinite;
+        }
+
+        @keyframes pulse-recording {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .mic-btn svg {
+            width: 32px;
+            height: 32px;
+            fill: #ffffff;
+            transition: transform 0.3s ease;
+        }
+
+        .mic-btn.recording svg {
+            transform: scale(0.9);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .action-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .action-btn:active {
+            transform: translateY(0);
+        }
+
+        .action-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow"></div>
+    <div class="ambient-glow-2"></div>
+
+    <div class="container">
+        <header>
+            <h1>Vayu Dictation</h1>
+            <div class="status-badge">
+                <div id="statusDot" class="status-dot"></div>
+                <span id="statusText">Disconnected</span>
+            </div>
+        </header>
+
+        <div id="transcriptionBox" class="transcription-window">
+            <span class="text-placeholder" style="color: var(--text-muted);">Press the microphone button and start speaking. Your transcription will appear here...</span>
+        </div>
+
+        <div class="wave-container">
+            <canvas id="gl-wave"></canvas>
+        </div>
+
+        <div class="controls-row">
+            <div class="mic-btn-container">
+                <button id="micBtn" class="mic-btn" aria-label="Toggle Recording">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="btn-group">
+                <button id="copyBtn" class="action-btn">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
+                    Copy
+                </button>
+                <button id="clearBtn" class="action-btn">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                    </svg>
+                    Clear
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= WebGL Shaders ================= -->
+    <script id="vs" type="x-shader/x-vertex">
+        attribute vec2 aPos; void main(){ gl_Position=vec4(aPos,0.0,1.0); }
+    </script>
+
+    <script id="fs-wave" type="x-shader/x-fragment">
+        precision highp float;
+        uniform vec2 iResolution; 
+        uniform float iTime;
+        uniform float uVolume;
+        
+        const float PI = 3.14159265359;
+        const float AMPLITUDE   = 0.45;
+        const float FREQ        = 1.05;
+        const float ABER_FREQ   = 0.95;
+        const float SPEED       = 2.0;
+        const float WAVE_SCALE  = 0.95;
+        const float ABERRATION  = 2.0;
+        const float THICKNESS   = 2.8;
+        const float INTENSITY   = 2.4;
+        const float FALLOFF     = 1.8;
+        const float EDGE_MASK   = 0.5;
+        const float EDGE_INSET  = 0.0;
+        const float BAND_FILL   = 32000.0;
+        const float BAND_THICK  = 0.06;
+        const float SOFTNESS    = 2.2;
+
+        vec3 spectral4(int s){
+            float x = float(s);
+            return clamp(vec3(abs(x-3.0)-1.0, 2.0-abs(x-2.0), 2.0-abs(x-4.0)), 0.0, 1.0);
+        }
+
+        void main() {
+            vec2 R = iResolution.xy;
+            vec2 p = (gl_FragCoord.xy + 0.5) * 2.0 / R - 1.0;
+            float aspect = R.x / R.y;
+            p.x *= aspect;
+            float yScreen = p.y;
+            p /= WAVE_SCALE;
+
+            float t = iTime;
+            float drift = mod(t, 20.0*PI) * SPEED;
+
+            float xN  = p.x / max(aspect, 1.0);
+            float env = cos(PI*0.5 * min(abs(0.9*xN), 1.0));
+            env *= env;
+
+            float volScale = clamp(0.45 + uVolume * 1.0, 0.45, 1.4);
+            float A1    = (AMPLITUDE + 0.04 * sin(t * 2.0)) * volScale;
+            float A2    = A1 * 1.15;
+            float AB    = ABERRATION * (0.6 + 0.4 * volScale);
+            float th    = 0.01 * THICKNESS;
+            float inten = 0.01 * INTENSITY * (0.5 + 0.5 * volScale);
+            float soft  = 0.01 * SOFTNESS;
+
+            float yMain = A1 * env * sin(p.x*FREQ + drift);
+
+            float bandFillTh = max(BAND_THICK, 1e-4);
+            float bandAmt    = 1e-4 * BAND_FILL * inten;
+            vec3 num = vec3(0.0), den = vec3(0.0);
+            for(int s = 0; s < 4; s++){
+                vec3 hue = spectral4(s);
+                den += hue;
+                float ab = mix(-AB, AB, float(s)/3.0);
+                float yL = A2 * env * sin(p.x*ABER_FREQ + drift + ab);
+                float d   = abs(p.y - yL);
+                float lor = 1.0/(1.0 + (0.02*d)*(0.02*d));
+                float line = inten / (sqrt(d*d + soft*soft) + th);
+                float lo = min(yMain, yL), hi = max(yMain, yL);
+                float dBand = max(0.0, max(p.y - hi, lo - p.y));
+                float band  = bandAmt / (dBand + bandFillTh);
+                num += hue * lor * (line + band);
+            }
+            vec3 col = num / den;
+
+            float dM    = abs(p.y - yMain);
+            float lorM  = 1.0/(1.0 + (0.02*dM)*(0.02*dM));
+            col += 0.5 * inten * lorM / (sqrt(dM*dM + soft*soft) + th);
+
+            col = pow(max(col, 0.0), vec3(1.3));
+            float emT = clamp((abs(yScreen) - 1.0 + EDGE_INSET) / (-max(EDGE_MASK, 1e-4)), 0.0, 1.0);
+            float em  = emT*emT*(3.0 - 2.0*emT);
+            float gauss = exp(-pow(xN*FALLOFF, 2.0));
+            col *= em*gauss;
+            
+            gl_FragColor = vec4(col, col.r + col.g + col.b > 0.02 ? 1.0 : 0.0);
+        }
+    </script>
+
+    <script>
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const micBtn = document.getElementById('micBtn');
+        const transcriptionBox = document.getElementById('transcriptionBox');
+        const copyBtn = document.getElementById('copyBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const glCanvas = document.getElementById('gl-wave');
+
+        let ws = null;
+        let audioContext = null;
+        let mediaStream = null;
+        let scriptProcessor = null;
+        let isRecording = false;
+        let finalText = "";
+        let currentPartial = "";
+        let reconnectTimeout = null;
+
+        // WebGL Setup
+        let gl, prog, uVolLoc, uTimeLoc, uResLoc;
+        let timeStart = Date.now();
+        let volumeVal = 0.04;
+
+        function initWebGL() {
+            gl = glCanvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+            if (!gl) {
+                console.error("WebGL not supported");
+                return;
+            }
+            
+            const vs = gl.createShader(gl.VERTEX_SHADER);
+            gl.shaderSource(vs, document.getElementById('vs').textContent);
+            gl.compileShader(vs);
+            
+            const fs = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(fs, document.getElementById('fs-wave').textContent);
+            gl.compileShader(fs);
+            
+            prog = gl.createProgram();
+            gl.attachShader(prog, vs);
+            gl.attachShader(prog, fs);
+            gl.linkProgram(prog);
+            
+            if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+                console.error("Shader Link Error:", gl.getProgramInfoLog(prog));
+                return;
+            }
+            
+            gl.useProgram(prog);
+            
+            const buf = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+            
+            const aPos = gl.getAttribLocation(prog, 'aPos');
+            gl.enableVertexAttribArray(aPos);
+            gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+            
+            uVolLoc = gl.getUniformLocation(prog, 'uVolume');
+            uTimeLoc = gl.getUniformLocation(prog, 'iTime');
+            uResLoc = gl.getUniformLocation(prog, 'iResolution');
+            
+            resize();
+            window.addEventListener('resize', resize);
+            requestAnimationFrame(render);
+        }
+
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            glCanvas.width = glCanvas.clientWidth * dpr;
+            glCanvas.height = glCanvas.clientHeight * dpr;
+            gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+        }
+
+        function render() {
+            if (!gl) return;
+            const t = (Date.now() - timeStart) / 1000.0;
+            
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            
+            gl.uniform2f(uResLoc, glCanvas.width, glCanvas.height);
+            gl.uniform1f(uTimeLoc, t);
+            gl.uniform1f(uVolLoc, volumeVal);
+            
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(render);
+        }
+
+        // Establish WebSocket connection to local server
+        async function connectWebSocket() {
+            return new Promise((resolve, reject) => {
+                setStatus('connecting');
+                
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host || 'localhost:8181';
+                ws = new WebSocket(`${protocol}//${host}/ws`);
+                ws.binaryType = 'arraybuffer';
+
+                ws.onopen = () => {
+                    setStatus('connected');
+                    logger("WebSocket Connected.");
+                    resolve();
+                };
+
+                ws.onmessage = (event) => {
+                    const response = JSON.parse(event.data);
+                    const text = response.text;
+                    const isPartial = response.is_partial;
+
+                    if (isPartial) {
+                        currentPartial = text;
+                    } else {
+                        finalText += (finalText ? " " : "") + text;
+                        currentPartial = "";
+                    }
+                    updateTranscriptionUI();
+                };
+
+                ws.onerror = (error) => {
+                    logger(`WebSocket Error: ${error}`);
+                    setStatus('disconnected');
+                    reject(error);
+                };
+
+                ws.onclose = () => {
+                    logger("WebSocket Closed.");
+                    setStatus('disconnected');
+                    if (isRecording) {
+                        stopRecording();
+                    }
+                    // Attempt auto-reconnect
+                    reconnectTimeout = setTimeout(connectWebSocket, 3000);
+                };
+            });
+        }
+
+        function setStatus(status) {
+            statusDot.className = 'status-dot';
+            if (status === 'connected') {
+                statusDot.classList.add('connected');
+                statusText.textContent = "Connected";
+            } else if (status === 'connecting') {
+                statusDot.classList.add('connecting');
+                statusText.textContent = "Connecting...";
+            } else {
+                statusText.textContent = "Disconnected";
+            }
+        }
+
+        function updateTranscriptionUI() {
+            if (!finalText && !currentPartial) {
+                transcriptionBox.innerHTML = `<span class="text-placeholder" style="color: var(--text-muted);">Press the microphone button and start speaking. Your transcription will appear here...</span>`;
+                return;
+            }
+
+            let html = "";
+            if (finalText) {
+                html += `<span class="final-text">${finalText}</span>`;
+            }
+            if (currentPartial) {
+                html += (html ? " " : "") + `<span class="partial-text">${currentPartial}...</span>`;
+            }
+            transcriptionBox.innerHTML = html;
+            transcriptionBox.scrollTop = transcriptionBox.scrollHeight;
+        }
+
+        // Recorder methods
+        async function startRecording() {
+            if (isRecording) return;
+            
+            try {
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    await connectWebSocket();
+                }
+
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000
+                });
+
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                
+                // Volume Analyser for the Vayu Wave visualizer
+                const analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                source.connect(analyser);
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                const checkVolume = () => {
+                    if (!isRecording) return;
+                    analyser.getByteFrequencyData(dataArray);
+                    let sum = 0;
+                    for (let i = 0; i < dataArray.length; i++) {
+                        sum += dataArray[i];
+                    }
+                    const avg = sum / dataArray.length;
+                    // Perceptual (power-law) mapping with gain so normal speech swings the
+                    // wave hard instead of hovering near the floor
+                    const targetVolume = Math.min(1.0, Math.pow(avg / 40.0, 0.6) * 1.7);
+                    // Fast attack / slow release: jumps with speech onset, breathes on decay
+                    const k = targetVolume > volumeVal ? 0.5 : 0.1;
+                    volumeVal = volumeVal * (1 - k) + targetVolume * k;
+                    setTimeout(checkVolume, 30);
+                };
+
+                scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+                scriptProcessor.onaudioprocess = (event) => {
+                    if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+                    
+                    const inputData = event.inputBuffer.getChannelData(0);
+                    const pcmBuffer = new Int16Array(inputData.length);
+                    for (let i = 0; i < inputData.length; i++) {
+                        const s = Math.max(-1, Math.min(1, inputData[i]));
+                        pcmBuffer[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    ws.send(pcmBuffer.buffer);
+                };
+
+                source.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+
+                isRecording = true;
+                volumeVal = 0.08;
+                checkVolume();
+                
+                micBtn.classList.add('recording');
+                logger("Recording started.");
+            } catch (err) {
+                console.error("Failed to start recording:", err);
+                alert("Microphone access denied or connection failed.");
+                stopRecording();
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            volumeVal = 0.04;
+            micBtn.classList.remove('recording');
+
+            if (scriptProcessor) {
+                scriptProcessor.disconnect();
+                scriptProcessor = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            setStatus('connected');
+            logger("Recording stopped.");
+        }
+
+        // Event Listeners
+        micBtn.addEventListener('click', () => {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            finalText = "";
+            currentPartial = "";
+            updateTranscriptionUI();
+        });
+
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = finalText + (currentPartial ? " " + currentPartial : "");
+            if (!textToCopy) return;
+
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const prevText = copyBtn.innerHTML;
+                copyBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" style="fill: #10b981; width: 18px; height: 18px; margin-right: 8px;">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    </svg>
+                    Copied!
+                `;
+                setTimeout(() => {
+                    copyBtn.innerHTML = prevText;
+                }, 1500);
+            }).catch(err => {
+                console.error("Clipboard copy failed:", err);
+            });
+        });
+
+        function logger(msg) {
+            console.log(`[Vayu Client] ${msg}`);
+        }
+
+        // Init page
+        window.onload = () => {
+            initWebGL();
+            connectWebSocket();
+        };
+    </script>
+</body>
+</html>

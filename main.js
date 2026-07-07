@@ -91,6 +91,75 @@ function startDaemon() {
   }
 }
 
+// ===== Managed transcription server (bundled whisperflow_clone) =====
+// The STT engine ships INSIDE Vayu (vendored under ./whisperflow_clone) and Vayu
+// owns its lifecycle: health-check :8181, bootstrap the venv on first run, spawn
+// uvicorn, and kill it on quit. VAYU_DATA_DIR is passed so the server reads the
+// same whisper_bias.txt Vayu writes (vocabulary bias / initial_prompt).
+let whisperProcess = null;
+
+// Source ships beside main.js (dev AND non-asar packaged both resolve here).
+function whisperDir() { return path.join(__dirname, 'whisperflow_clone'); }
+// The venv lives in the WRITABLE data dir, never inside the (signed, read-only)
+// app bundle — so first-run setup can create it without breaking the signature.
+function whisperVenvPython() { return path.join(DATA_DIR, 'stt-venv', 'bin', 'python'); }
+
+function startWhisperServer() {
+  const http = require('http');
+  // Don't double-spawn if a server (manual or prior) is already up.
+  const req = http.get({ host: '127.0.0.1', port: 8181, path: '/health', timeout: 800 }, (res) => {
+    res.resume();
+    appendRuntimeLog('whisper server already running on :8181 — not spawning');
+  });
+  req.on('error', () => ensureVenvThenSpawn());
+  req.on('timeout', () => { req.destroy(); ensureVenvThenSpawn(); });
+}
+
+function ensureVenvThenSpawn() {
+  const dir = whisperDir();
+  const venvPython = whisperVenvPython();
+  if (!fs.existsSync(path.join(dir, 'requirements.txt'))) {
+    appendRuntimeLog(`whisper: bundled server missing at ${dir} — transcription unavailable`);
+    return;
+  }
+  if (fs.existsSync(venvPython)) return spawnWhisper(venvPython, dir);
+
+  // First run: create the venv in DATA_DIR and pip-install requirements
+  // (downloads torch/whisper — minutes). Best-effort; on failure we log the
+  // exact manual command rather than failing silently.
+  const venvRoot = path.join(DATA_DIR, 'stt-venv');
+  appendRuntimeLog('whisper: first-run setup (creating venv + downloading dependencies, this takes a few minutes)…');
+  const venv = spawn('python3', ['-m', 'venv', venvRoot]);
+  venv.on('error', (e) => appendRuntimeLog(`whisper: python3 not found (${e.message}). Install Xcode CLT, then restart Vayu.`));
+  venv.on('close', (code) => {
+    if (code !== 0) { appendRuntimeLog(`whisper: venv creation exited ${code}`); return; }
+    const pip = spawn(path.join(venvRoot, 'bin', 'pip'), ['install', '-r', path.join(dir, 'requirements.txt')]);
+    pip.stdout.on('data', (d) => appendRuntimeLog(`whisper-setup: ${d.toString().trim()}`));
+    pip.stderr.on('data', (d) => appendRuntimeLog(`whisper-setup: ${d.toString().trim()}`));
+    pip.on('error', (e) => appendRuntimeLog(`whisper: pip failed (${e.message})`));
+    pip.on('close', (c) => {
+      if (c === 0 && fs.existsSync(venvPython)) spawnWhisper(venvPython, dir);
+      else appendRuntimeLog(`whisper: dependency install exited ${c}. Manual: python3 -m venv "${venvRoot}" && "${venvRoot}/bin/pip" install -r "${path.join(dir, 'requirements.txt')}"`);
+    });
+  });
+}
+
+function spawnWhisper(venvPython, dir) {
+  const parent = path.dirname(dir); // must be on PYTHONPATH for `whisperflow_clone.src.server`
+  try {
+    whisperProcess = spawn(venvPython, [
+      '-m', 'uvicorn', 'whisperflow_clone.src.server:app', '--host', '127.0.0.1', '--port', '8181',
+    ], { cwd: parent, env: { ...process.env, PYTHONPATH: parent, VAYU_DATA_DIR: DATA_DIR } });
+    appendRuntimeLog(`whisper: spawned server pid=${whisperProcess.pid}`);
+    whisperProcess.stdout.on('data', (d) => appendRuntimeLog(`whisper: ${d.toString().trim()}`));
+    whisperProcess.stderr.on('data', (d) => appendRuntimeLog(`whisper: ${d.toString().trim()}`));
+    whisperProcess.on('error', (e) => appendRuntimeLog(`whisper: spawn error ${e.message}`));
+    whisperProcess.on('close', (code) => { appendRuntimeLog(`whisper: server exited ${code}`); whisperProcess = null; });
+  } catch (e) {
+    appendRuntimeLog(`whisper: exception spawning server ${e.message}`);
+  }
+}
+
 function createWindow() {
   appendRuntimeLog('createWindow called');
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -657,7 +726,8 @@ if (!gotTheLock) {
     createApplicationMenu();
     createStatusTray();
     const accessibilityTrusted = checkAccessibilityTrust(false);
-    startDaemon(); // Spawn the background helper binary
+    startDaemon(); // Spawn the background hotkey helper binary
+    startWhisperServer(); // Spawn the bundled STT server (:8181) if not already up
     createWindow();
     initAutomations();
     if (!accessibilityTrusted) {
@@ -682,6 +752,9 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   if (daemonProcess) {
     daemonProcess.kill();
+  }
+  if (whisperProcess) {
+    whisperProcess.kill();
   }
 });
 

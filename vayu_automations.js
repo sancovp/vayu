@@ -230,9 +230,27 @@ class VayuAutomations {
       this._correctionMatchers = this._buildCorrectionMatchers(corrections);
       this._rawDoc = raw;
       this.config = { cave: raw.cave || {}, contacts: raw.contacts || {}, wake, bias, corrections, routes };
+      this.writeWhisperBias();
       this.log(`automations: loaded ${routes.length} routes, ${Object.keys(this.config.contacts).length} contacts, ${wake.length} wake forms, ${Object.keys(corrections).length} corrections, ${bias.length} bias terms (cave ${this.config.cave.enabled ? 'enabled' : 'disabled'})`);
     } catch (e) {
       this.log(`automations: config load failed ${e.message}`);
+    }
+  }
+
+  /** Derive the whisper bias prompt (proper nouns + correction targets) and
+   * write it where the transcription server reads it (whisper_bias.txt beside
+   * automations.yaml). Fed to whisper as initial_prompt — the ROOT fix that
+   * steers tiny.en toward the vocabulary instead of the nearest English word. */
+  writeWhisperBias() {
+    try {
+      const terms = [...new Set(
+        [...(this.config.bias || []), ...Object.keys(this.config.corrections || {})]
+          .map((s) => String(s).trim()).filter(Boolean)
+      )];
+      const prompt = terms.length ? `${terms.join(', ')}.` : '';
+      fs.writeFileSync(path.join(path.dirname(this.configPath), 'whisper_bias.txt'), prompt);
+    } catch (e) {
+      this.log(`automations: writeWhisperBias failed ${e.message}`);
     }
   }
 

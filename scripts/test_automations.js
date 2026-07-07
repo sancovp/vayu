@@ -195,6 +195,17 @@ routes:
   assert.strictEqual(auto._assembleSpelledWord('o n i o n morph'), 'onionmorph');
   assert.strictEqual(auto._assembleSpelledWord('a b c stop and more'), 'abc', 'stop terminates assembly');
 
+  // 15c. WHISPER BIAS FILE — vocabulary (bias + correction targets) is written
+  // to whisper_bias.txt for the transcription server to read as initial_prompt.
+  {
+    const biasFile = path.join(tmpDir, 'whisper_bias.txt');
+    assert.ok(fs.existsSync(biasFile), 'whisper_bias.txt written on load');
+    const prompt = fs.readFileSync(biasFile, 'utf8');
+    assert.ok(prompt.includes('Vayu') && prompt.includes('CAVE'), 'bias terms in prompt');
+    assert.ok(prompt.includes('onionmorph'), 'correction targets included as vocabulary');
+    assert.ok(prompt.trim().endsWith('.'), 'prompt is a natural-list ending in a period');
+  }
+
   // 16. a real command reports its matched span back for juicing
   {
     calls.dashboard = 0;

@@ -25,3 +25,9 @@ transcripts/
 # Editor metadata
 .idea/
 .vscode/
+
+# Vendored STT engine — track source, not the venv/caches/weights
+whisperflow_clone/.venv/
+whisperflow_clone/**/__pycache__/
+whisperflow_clone/models/*.pt
+stt-venv/
