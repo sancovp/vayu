@@ -72,6 +72,14 @@ agentic reaction lives server-side in CAVE's `Automations()` (`EventAutomation` 
 * Actions: `open_dashboard` · `cave.send` (agent name lowercased) · `shell` · `http`.
 * Trigger points: `on: paste` = full utterance at stop (renderer awaits the verdict);
   `on: final` = per closed segment mid-dictation (fire-and-forget).
+* **Wake word (`{wake}` token):** the model is English-only (`tiny.en`) and physically
+  cannot transcribe the out-of-vocab name "vayu" — it snaps to the nearest real word
+  ("vite", "value", "bayou", "via"). So no route hardcodes "vayu"; they use the `{wake}`
+  placeholder, expanded at regex-compile time to a case-insensitive alternation over every
+  accepted spoken/mis-transcribed form. The set is the `wake:` list in automations.yaml
+  (defaults in `DEFAULT_WAKE`); add a line if your voice trips a form not listed. This is
+  the wake-word analogue of the `contacts:` alias list used for agent names. Longest form
+  wins (alternation sorted by length). Tests: `scripts/test_automations.js` (§2b).
 
 ### E. CAVE Link (`cave_link.js`)
 * Mirrors the canonical frontend↔CAVE shapes (agent-control-panel pattern):

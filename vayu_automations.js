@@ -31,6 +31,20 @@ const path = require('path');
 const { execFile } = require('child_process');
 const yaml = require('js-yaml');
 
+// The wake word "vayu" is out-of-vocabulary for the whisperflow_clone server's
+// English-only `tiny.en` model — it CANNOT emit "vayu", it snaps the sound to
+// the nearest real English word ("vite", "value", "bayou", "via"...). So a
+// route that matches the literal token "vayu" never fires. Instead, routes use
+// the `{wake}` placeholder, which compiles to an alternation over every form
+// tiny.en actually produces for /ˈvɑːjuː/. Extend it via `wake:` in the yaml.
+const DEFAULT_WAKE = [
+  'vayu', 'vayou', 'vayoo', 'vaya', 'vayo',
+  'vite', 'value', 'bayou', 'via',
+  'veyu', 'viyu', 'veo', 'vio', 'vaio', 'veja',
+  'wayu', 'wahoo', 'vahoo',
+  'buy you', 'by you', 'why you', 'oh you',
+];
+
 const DEFAULT_CONFIG = `# Vayu automations — hot-reloaded on save.
 # A system-agnostic hook table: trigger pattern -> action. CAVE is just one
 # possible action (cave.send); play_sound/shell/http need no agent runtime.
@@ -38,6 +52,20 @@ const DEFAULT_CONFIG = `# Vayu automations — hot-reloaded on save.
 cave:
   base_url: "http://localhost:8765"
   enabled: true
+
+# The wake word. The local whisper model is English-only (tiny.en) and never
+# actually transcribes "vayu" — it hears the nearest real word ("vite",
+# "value", "bayou", ...). Routes below use the {wake} token, which expands to
+# an alternation over ALL of these accepted spoken/mis-transcribed forms. If
+# your voice trips a form not listed here, just add a line.
+wake:
+  - vayu
+  - vite
+  - value
+  - bayou
+  - via
+  - vayou
+  - wahoo
 
 # Canonical contact name -> aliases/nicknames (what you might actually say,
 # including likely mis-transcriptions). Add a nickname by adding a line here.
@@ -53,7 +81,7 @@ contacts:
 
 routes:
   - name: open vayu
-    match: "^(hey,? )?vayu,? open( the)?( dashboard| app| vayu)?[.!]?$"
+    match: "^(hey,? )?{wake},? open( the)?( dashboard| app| vayu)?[.!]?$"
     on: paste
     action: open_dashboard
     consume: true
@@ -136,20 +164,37 @@ class VayuAutomations {
   load() {
     try {
       const raw = yaml.load(fs.readFileSync(this.configPath, 'utf8')) || {};
+      // The accepted spoken forms of the wake word (canonical "vayu" + every
+      // form tiny.en actually emits for it). yaml `wake:` overrides the default.
+      const wake = (Array.isArray(raw.wake) && raw.wake.length) ? raw.wake : DEFAULT_WAKE;
+      const wakeAlternation = this._buildWakeAlternation(wake);
       const routes = (raw.routes || []).map((r, i) => {
         try {
-          return { ...r, _re: new RegExp(r.match, 'i') };
+          // Expand the {wake} placeholder to the homophone alternation before
+          // compiling, so a route never has to hardcode "vayu" (which the
+          // English-only model can't produce).
+          const pattern = String(r.match).replace(/\{wake\}/g, wakeAlternation);
+          return { ...r, _re: new RegExp(pattern, 'i') };
         } catch (e) {
           this.log(`automations: bad regex in route ${r.name || i}: ${e.message}`);
           return null;
         }
       }).filter(Boolean);
       this._rawDoc = raw;
-      this.config = { cave: raw.cave || {}, contacts: raw.contacts || {}, routes };
-      this.log(`automations: loaded ${routes.length} routes, ${Object.keys(this.config.contacts).length} contacts (cave ${this.config.cave.enabled ? 'enabled' : 'disabled'})`);
+      this.config = { cave: raw.cave || {}, contacts: raw.contacts || {}, wake, routes };
+      this.log(`automations: loaded ${routes.length} routes, ${Object.keys(this.config.contacts).length} contacts, ${wake.length} wake forms (cave ${this.config.cave.enabled ? 'enabled' : 'disabled'})`);
     } catch (e) {
       this.log(`automations: config load failed ${e.message}`);
     }
+  }
+
+  /** Build a non-capturing regex alternation from the wake-word forms, longest
+   * first (so "value" wins over a hypothetical "val"), each escaped. */
+  _buildWakeAlternation(forms) {
+    const escaped = [...new Set(forms.map((f) => String(f).trim().toLowerCase()).filter(Boolean))]
+      .sort((a, b) => b.length - a.length)
+      .map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return escaped.length ? `(?:${escaped.join('|')})` : 'vayu';
   }
 
   /** Best-effort refresh of CAVE's live agent registry. Supplementary only —

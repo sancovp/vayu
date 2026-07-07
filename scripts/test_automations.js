@@ -27,6 +27,23 @@ const auto = new VayuAutomations({
   assert.strictEqual(v.consumed, true);
   assert.strictEqual(calls.dashboard, 1);
 
+  // 2b. WAKE-WORD HOMOPHONES — the English-only model can't emit "vayu", so it
+  // hears "vite" / "value" / "bayou" etc. The {wake} token must still fire the
+  // open-dashboard command for every one of those mis-transcriptions.
+  for (const heard of ['Hey Vite, open the dashboard.', 'Value open the dashboard', 'Hey bayou, open the app.', 'Wahoo, open vayu.']) {
+    const before = calls.dashboard;
+    const r = await auto.handle('paste', heard);
+    assert.strictEqual(r.consumed, true, `wake homophone should consume: "${heard}"`);
+    assert.strictEqual(calls.dashboard, before + 1, `wake homophone should open dashboard: "${heard}"`);
+  }
+  // ...and a genuinely different utterance must NOT trip the wake word
+  {
+    const before = calls.dashboard;
+    const r = await auto.handle('paste', 'Please open the dashboard.');
+    assert.strictEqual(r.consumed, false, 'non-wake utterance must not fire wake route');
+    assert.strictEqual(calls.dashboard, before, 'non-wake utterance must not open dashboard');
+  }
+
   // 3. "tell <agent> <msg>" -> cave.send, agent resolved through the contacts list
   v = await auto.handle('paste', 'Tell Conductor, review the vayu design doc');
   assert.strictEqual(v.consumed, true);
