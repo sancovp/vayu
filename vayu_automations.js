@@ -118,6 +118,17 @@ routes:
     args: { term: "{term}" }
     consume: true
 
+  # Spell the intended word so tiny.en can't mangle it: "vayu correct <heard>
+  # to letters O N I O N M O R P H stop". "letters" makes you say letter NAMES
+  # (which the model transcribes reliably); "stop" is an optional terminator.
+  # Must come BEFORE the plain "correct a term" route (first match wins).
+  - name: correct a term by spelling
+    match: "^{wake},? (?:correct|fix|change)[,:]? (?<from>.+?) (?:to|as|into|with) letters?[,:]? (?<spelled>.+?)(?: stop)?[.!?]*$"
+    on: paste
+    action: add_correction_spelled
+    args: { from: "{from}", spelled: "{spelled}" }
+    consume: true
+
   - name: correct a term
     match: "^{wake},? (?:correct|fix|change)[,:]? (?<from>.+?) (?:to|as|into|with) (?<to>.+?)[.!?]*$"
     on: paste
@@ -388,6 +399,31 @@ class VayuAutomations {
     return t ? t.split(/\s+/).length : 0;
   }
 
+  /** Assemble a word from a spelled-out utterance ("O N I O N" or letter names
+   * "oh en eye oh en") into "onion". Each token becomes its letter; a token
+   * that is already a multi-letter run (the model collapsed "abc") or a real
+   * word passes through verbatim, so "letters o n i o n morph" -> "onionmorph".
+   * Lowercase by default (most vocab is lowercase; fix case in the yaml/UI). */
+  _assembleSpelledWord(spelled) {
+    const NAMES = {
+      ay: 'a', bee: 'b', be: 'b', cee: 'c', see: 'c', sea: 'c', dee: 'd', ee: 'e',
+      ef: 'f', eff: 'f', gee: 'g', jee: 'g', aitch: 'h', haitch: 'h', eye: 'i', ai: 'i',
+      jay: 'j', kay: 'k', cay: 'k', el: 'l', ell: 'l', em: 'm', en: 'n', oh: 'o', ow: 'o',
+      pee: 'p', pea: 'p', cue: 'q', queue: 'q', kew: 'q', ar: 'r', are: 'r', es: 's', ess: 's',
+      tee: 't', tea: 't', yew: 'u', vee: 'v', ex: 'x', eks: 'x', wye: 'y', why: 'y',
+      zee: 'z', zed: 'z', dub: 'w', doubleu: 'w',
+    };
+    const tokens = String(spelled || '').toLowerCase().replace(/[.,!?]/g, ' ').split(/\s+/).filter(Boolean);
+    let out = '';
+    for (const t of tokens) {
+      if (t === 'stop') break;
+      if (NAMES[t]) { out += NAMES[t]; continue; }
+      const cleaned = t.replace(/[^a-z0-9]/g, '');
+      if (cleaned) out += cleaned; // single letter, collapsed run, or a plain word
+    }
+    return out;
+  }
+
   /** Carry the heard form's casing onto the intended word (ALLCAPS / Title / as-is). */
   _matchCase(from, intended) {
     if (from && from === from.toUpperCase() && from !== from.toLowerCase()) return intended.toUpperCase();
@@ -508,6 +544,11 @@ class VayuAutomations {
       } else if (route.action === 'add_correction') {
         const res = this.addCorrection(args.to, args.from);
         return { ...verdict, correction: { from: args.from, to: args.to }, error: res.ok ? undefined : res.error };
+      } else if (route.action === 'add_correction_spelled') {
+        const intended = this._assembleSpelledWord(args.spelled);
+        if (!intended) return { ...verdict, error: 'could not assemble spelled word' };
+        const res = this.addCorrection(intended, args.from);
+        return { ...verdict, correction: { from: args.from, to: intended }, spelled: true, error: res.ok ? undefined : res.error };
       } else if (route.action === 'cave.send' && this.caveLink) {
         const resolved = this.resolveContact(args.agent);
         if (!resolved) {

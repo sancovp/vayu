@@ -96,7 +96,10 @@ carries a vocabulary in the same hot-reloaded `automations.yaml`.
      `bad_terms.jsonl` (append-only, never corrupts the yaml) and **is consumed** (ablated,
      never pasted);
   2. spoken `"vayu correct <heard> to <intended>"` → `add_correction`: persists a
-     correction immediately (live on the next utterance);
+     correction immediately (live on the next utterance). When the model can't say the
+     intended word either, **spell it**: `"vayu correct <heard> to letters O N I O N stop"`
+     → `add_correction_spelled` reassembles the letter names/letters into the word
+     (`_assembleSpelledWord`; "letters" cues letter-name pronunciation, "stop" ends it);
   3. dashboard **highlight-to-flag** — select a bad word in any transcript card → a popover
      offers "⚑ Bad term" (log it) / "✎ Correct to…" (map it). The Vocabulary settings panel
      lists corrections + flagged terms; each flagged term has an inline "→ intended" fix.

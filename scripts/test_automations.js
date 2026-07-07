@@ -127,6 +127,12 @@ routes:
     action: flag_bad_term
     args: { term: "{term}" }
     consume: true
+  - name: correct a term by spelling
+    match: "^{wake},? (?:correct|fix|change)[,:]? (?<from>.+?) (?:to|as|into|with) letters?[,:]? (?<spelled>.+?)(?: stop)?[.!?]*$"
+    on: paste
+    action: add_correction_spelled
+    args: { from: "{from}", spelled: "{spelled}" }
+    consume: true
   - name: correct a term
     match: "^{wake},? (?:correct|fix|change)[,:]? (?<from>.+?) (?:to|as|into|with) (?<to>.+?)[.!?]*$"
     on: paste
@@ -173,6 +179,21 @@ routes:
     // and it now rewrites transcripts
     assert.strictEqual(auto.applyCorrections('tell see ave to run').text, 'tell CAVE to run');
   }
+
+  // 15b. SPELL-OUT — "vayu correct <heard> to letters ... stop" assembles the
+  // intended word letter-by-letter (tiny.en can't say it, but CAN say letters).
+  {
+    const r = await auto.handle('paste', 'Value correct onion more to letters O N I O N M O R P H stop');
+    assert.strictEqual(r.consumed, true, 'spelled correction consumed');
+    assert.strictEqual(r.action, 'add_correction_spelled');
+    assert.strictEqual(r.correction.to, 'onionmorph', 'letters assembled into the intended word');
+    assert.strictEqual(auto.applyCorrections('open onion more now').text, 'open onionmorph now', 'spelled correction is live');
+  }
+  // assembler unit checks: letter names, single letters, collapsed run, mixed word
+  assert.strictEqual(auto._assembleSpelledWord('C A V E'), 'cave');
+  assert.strictEqual(auto._assembleSpelledWord('see ay vee ee'), 'cave');
+  assert.strictEqual(auto._assembleSpelledWord('o n i o n morph'), 'onionmorph');
+  assert.strictEqual(auto._assembleSpelledWord('a b c stop and more'), 'abc', 'stop terminates assembly');
 
   // 16. a real command reports its matched span back for juicing
   {
