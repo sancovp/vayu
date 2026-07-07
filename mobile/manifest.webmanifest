@@ -1,0 +1,14 @@
+{
+  "name": "Vayu",
+  "short_name": "Vayu",
+  "description": "Voice dictation + voice commands, in your pocket.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a1830",
+  "theme_color": "#0a1830",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

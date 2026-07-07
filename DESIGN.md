@@ -158,6 +158,30 @@ you feel the system obey. Substrate = the existing per-word span array (`streamW
 * Lorentzian glow + spectral4 dispersion; amplitude/intensity bound to `uVolume`;
   full-DPR canvas resize.
 
+### H. Mobile (PWA — `mobile/`)
+* **A separate, installable web app** — mobile can't do the desktop trick (global hotkey +
+  paste-into-any-app), so mobile Vayu is a voice→transcribe→**dispatch-to-CAVE** console +
+  copy-out, not a system-wide dictation layer. Self-contained; no build step.
+* **`mobile/vayu_core.js`** — the browser-safe port of the desktop classify/correction
+  engine (wake alternation, `applyCorrections`, spelled-word assembly, route classify) with
+  NO Node deps, so the SAME logic runs client-side and is unit-tested under node
+  (`mobile/vayu_core.test.js`). Config is a plain object (embedded defaults + localStorage
+  overrides); desktop `vayu_automations.js` stays the authority, this mirrors its algorithms.
+* **STT = on-device Web Speech** (`SpeechRecognition`/`webkitSpeechRecognition`) — no
+  `:8181` dependency (a phone can't reach desktop localhost); graceful fallback to a manual
+  text box where Web Speech is absent (older iOS Safari).
+* Same **juice** (gold command pulse / aqua correction flash + sparkle bursts) and the full
+  **vocabulary loop**: spoken `vayu correct/bad translation`, spelled corrections,
+  long-press a word to flag it, and a settings sheet (CAVE base URL + add-correction +
+  vocab/flagged chips, all in localStorage). Command dispatch mirrors the CAVE shape
+  (`POST {base}/cave_agents/{agent}/send {message, ingress:"frontend"}`).
+* PWA shell: `manifest.webmanifest` + `sw.js` (**network-first** so updates propagate; cache
+  = offline fallback) + `icon.svg`. **VERIFIED in-browser** (mobile viewport): wake
+  homophones classify, corrections rewrite+juice, spoken spelled-correction persists, sheet
+  renders, zero console errors. Preview: launch config `vayu-mobile` (`http.server` on 5599).
+* ASPIRATIONAL: Capacitor native wrapper (share extension / app-store / background audio) —
+  a follow-up once we can test on a device.
+
 ---
 
 ## 3. Build & Package

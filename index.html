@@ -951,9 +951,8 @@
             if (corrected.spans && corrected.spans.length) {
               committedText = corrected.text;
               currentPartial = "";
-              refreshTranscriptDisplay();
-              // next frame so the swapped word spans exist before we light them
-              requestAnimationFrame(() => corrected.spans.forEach((s) => juiceWords(s.wordStart, s.wordEnd, 'correction')));
+              refreshTranscriptDisplay(); // synchronous — the swapped spans exist immediately
+              corrected.spans.forEach((s) => juiceWords(s.wordStart, s.wordEnd, 'correction'));
               juiceHoldMs = 700;
               rendererLog(`corrections applied: ${corrected.spans.map((s) => `${s.from}->${s.to}`).join(', ')}`);
             }

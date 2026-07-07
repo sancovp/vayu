@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#0a1830" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Vayu</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <style>
+    :root { --gold: #ffd65a; --aqua: #5affc8; --ink: #eaf4ff; --ink-soft: #9db6d6; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(120% 80% at 50% -10%, #16406e 0%, #0a1830 55%, #060f20 100%);
+      display: flex; flex-direction: column;
+      height: 100dvh; overflow: hidden;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px 8px;
+    }
+    .wordmark { font-weight: 700; letter-spacing: 0.28em; font-size: 15px; color: var(--ink); text-transform: uppercase; }
+    .wordmark small { color: var(--ink-soft); letter-spacing: 0.1em; font-weight: 500; }
+    .gear { background: none; border: none; color: var(--ink-soft); font-size: 22px; padding: 6px; }
+
+    #sky {
+      position: relative; flex: 1; margin: 8px 16px; padding: 18px 18px 90px;
+      border-radius: 22px; overflow-y: auto;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      backdrop-filter: blur(10px);
+      font-size: 26px; line-height: 1.5; font-weight: 500;
+    }
+    #sky:empty::before { content: attr(data-hint); color: var(--ink-soft); font-size: 17px; font-weight: 400; }
+    .w { display: inline-block; margin-right: 0.32em; transition: opacity .2s; }
+    .w.partial { opacity: 0.55; }
+
+    .w.cmd-match {
+      color: #fff7d6;
+      text-shadow: 0 0 6px rgba(255,214,90,.95), 0 0 22px rgba(255,180,40,.85), 0 0 40px rgba(255,150,0,.6);
+      animation: cmd-pulse .9s cubic-bezier(.2,.8,.2,1) both;
+    }
+    @keyframes cmd-pulse { 0%{transform:scale(1);filter:brightness(1)} 22%{transform:scale(1.28);filter:brightness(1.9)} 100%{transform:scale(1.06);filter:brightness(1.12)} }
+    .w.correction {
+      color: #d8fff0; text-shadow: 0 0 6px rgba(80,255,200,.95), 0 0 20px rgba(30,230,180,.8);
+      animation: corr-flash .85s ease-out both;
+    }
+    @keyframes corr-flash { 0%{transform:translateY(-3px) scale(1.2);filter:brightness(2)} 100%{transform:none;filter:none} }
+    .spark {
+      position: absolute; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; z-index: 5;
+      background: radial-gradient(circle, #fffbe6 0%, rgba(255,210,90,.9) 45%, rgba(255,160,20,0) 72%);
+      animation: spark-fly var(--dur,.8s) ease-out forwards;
+    }
+    .spark.aqua { background: radial-gradient(circle, #eafff8 0%, rgba(90,255,210,.9) 45%, rgba(30,220,180,0) 72%); }
+    @keyframes spark-fly { 0%{opacity:0;transform:translate(0,0) scale(.3)} 18%{opacity:1} 100%{opacity:0;transform:translate(var(--dx,0),var(--dy,-26px)) scale(1.05)} }
+
+    #status { text-align: center; color: var(--ink-soft); font-size: 13px; min-height: 18px; margin: -2px 0 4px; }
+    #toast {
+      position: fixed; left: 50%; bottom: 130px; transform: translateX(-50%) translateY(10px);
+      background: rgba(20,32,48,.95); color: var(--ink); padding: 9px 16px; border-radius: 999px;
+      font-size: 13px; opacity: 0; transition: opacity .25s, transform .25s; pointer-events: none; z-index: 60;
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .mic-wrap { position: relative; display: flex; justify-content: center; padding-bottom: 26px; }
+    #mic {
+      width: 78px; height: 78px; border-radius: 50%; border: none; color: #06121f;
+      background: radial-gradient(circle at 40% 35%, #bfe3ff, #4aa8ff);
+      box-shadow: 0 10px 30px rgba(0,120,255,.45), inset 0 2px 6px rgba(255,255,255,.6);
+      font-size: 30px; display: flex; align-items: center; justify-content: center; transition: transform .15s;
+    }
+    #mic:active { transform: scale(.94); }
+    #mic.live {
+      background: radial-gradient(circle at 40% 35%, #ffd9a0, #ff6a3d);
+      box-shadow: 0 0 0 0 rgba(255,120,60,.55), 0 10px 30px rgba(255,90,40,.5);
+      animation: pulse 1.4s ease-out infinite;
+    }
+    @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(255,120,60,.55),0 10px 30px rgba(255,90,40,.5)} 70%{box-shadow:0 0 0 26px rgba(255,120,60,0),0 10px 30px rgba(255,90,40,.5)} 100%{box-shadow:0 0 0 0 rgba(255,120,60,0),0 10px 30px rgba(255,90,40,.5)} }
+
+    /* manual fallback (no Web Speech) */
+    #manual { display: none; gap: 8px; padding: 0 16px 16px; }
+    #manual.show { display: flex; }
+    #manualInput { flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.08); color: var(--ink); font-size: 16px; }
+    .btn { border: none; border-radius: 12px; padding: 12px 16px; font-size: 15px; font-weight: 600; color: #06121f; background: linear-gradient(#bfe3ff,#4aa8ff); }
+
+    /* settings sheet */
+    #scrim { position: fixed; inset: 0; background: rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 70; }
+    #scrim.show { opacity: 1; pointer-events: auto; }
+    #sheet {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+      background: #0d1c33; border-top-left-radius: 22px; border-top-right-radius: 22px;
+      padding: 18px 20px calc(20px + env(safe-area-inset-bottom)); transform: translateY(100%); transition: transform .3s cubic-bezier(.2,.8,.2,1);
+      max-height: 82dvh; overflow-y: auto; border-top: 1px solid rgba(255,255,255,.1);
+    }
+    #sheet.show { transform: none; }
+    .sheet-title { font-weight: 700; letter-spacing: .14em; font-size: 13px; color: var(--ink-soft); text-transform: uppercase; margin-bottom: 14px; }
+    .field { margin-bottom: 18px; }
+    .field label { display: block; font-size: 13px; color: var(--ink-soft); margin-bottom: 6px; }
+    .field input { width: 100%; padding: 11px 13px; border-radius: 11px; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07); color: var(--ink); font-size: 16px; }
+    .row2 { display: flex; gap: 8px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 4px 11px; font-size: 13px; }
+    .chip b { color: var(--aqua); font-weight: 600; }
+    .hint { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wordmark">Vayu <small>mobile</small></div>
+    <button class="gear" id="gear" aria-label="Settings">⚙</button>
+  </header>
+
+  <div id="sky" data-hint="Tap the mic and speak. Say “vayu open the dashboard”, or dictate and it copies."></div>
+  <div id="status"></div>
+
+  <div id="manual">
+    <input id="manualInput" placeholder="Type here (speech not available on this browser)" />
+    <button class="btn" id="manualSend">Send</button>
+  </div>
+
+  <div class="mic-wrap">
+    <button id="mic" aria-label="Talk">🎙️</button>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="scrim"></div>
+  <div id="sheet">
+    <div class="sheet-title">Settings</div>
+    <div class="field">
+      <label>CAVE base URL — where “tell &lt;agent&gt;, …” dispatches</label>
+      <input id="caveUrl" placeholder="https://your-cave-host:8765" inputmode="url" />
+    </div>
+    <div class="field">
+      <label>Add correction — what it heard → what you meant</label>
+      <div class="row2">
+        <input id="corrHeard" placeholder="heard (e.g. onion morph)" />
+        <input id="corrIntended" placeholder="meant (e.g. onionmorph)" />
+      </div>
+      <div class="chips" id="corrChips"></div>
+    </div>
+    <div class="field">
+      <label>Flagged terms (say “vayu bad translation …” or long-press a word)</label>
+      <div class="chips" id="badChips"></div>
+    </div>
+    <div class="hint">
+      Voice commands: “vayu open the dashboard” · “tell &lt;agent&gt;, &lt;message&gt;” ·
+      “vayu bad translation &lt;word&gt;” · “vayu correct &lt;word&gt; to &lt;word&gt;” ·
+      spell it: “vayu correct &lt;word&gt; to letters O N I O N stop”.
+    </div>
+  </div>
+
+  <script src="vayu_core.js"></script>
+  <script>
+  (function () {
+    const { VayuCore } = window.VayuCore;
+
+    // ---- config: embedded defaults merged with localStorage overrides ----
+    const DEFAULT_ROUTES = [
+      { name: 'open dashboard', match: '^(hey,? )?{wake},? open( the)?( dashboard| app| vayu)?[.!]?$', on: 'paste', action: 'open_dashboard', consume: true },
+      { name: 'flag bad translation', match: '^{wake},? (?:bad|wrong)(?: (?:translation|transcription|term|word))?[,:]? (?<term>.+?)[.!?]*$', on: 'paste', action: 'flag_bad_term', consume: true },
+      { name: 'correct by spelling', match: '^{wake},? (?:correct|fix|change)[,:]? (?<from>.+?) (?:to|as|into|with) letters?[,:]? (?<spelled>.+?)(?: stop)?[.!?]*$', on: 'paste', action: 'add_correction_spelled', consume: true },
+      { name: 'correct a term', match: '^{wake},? (?:correct|fix|change)[,:]? (?<from>.+?) (?:to|as|into|with) (?<to>.+?)[.!?]*$', on: 'paste', action: 'add_correction', consume: true },
+      { name: 'tell an agent', match: '^tell (the )?(?<agent>[a-zA-Z0-9_-]+)[,:]? (?<msg>.+)$', on: 'paste', action: 'cave.send', consume: true },
+    ];
+    const store = {
+      get(k, d) { try { return JSON.parse(localStorage.getItem('vayu.' + k)) ?? d; } catch { return d; } },
+      set(k, v) { localStorage.setItem('vayu.' + k, JSON.stringify(v)); },
+    };
+    let corrections = store.get('corrections', { onionmorph: ['onion morph', 'union morph'] });
+    let badTerms = store.get('badTerms', []);
+    let caveUrl = store.get('caveUrl', '');
+
+    const core = new VayuCore({ corrections, routes: DEFAULT_ROUTES });
+    function refreshCore() { core.setConfig({ corrections, routes: DEFAULT_ROUTES }); }
+
+    // ---- transcript rendering (word spans, the juice substrate) ----
+    const sky = document.getElementById('sky');
+    const statusEl = document.getElementById('status');
+    let words = []; // {el,text}
+
+    function render(committed, partial) {
+      const cw = committed ? committed.split(' ') : [];
+      const pw = partial ? partial.split(' ') : [];
+      const all = cw.concat(pw);
+      for (let i = 0; i < all.length; i++) {
+        if (i < words.length) {
+          if (words[i].text !== all[i]) { words[i].text = all[i]; words[i].el.textContent = all[i]; }
+          words[i].el.classList.toggle('partial', i >= cw.length);
+        } else {
+          const el = document.createElement('span');
+          el.className = 'w' + (i >= cw.length ? ' partial' : '');
+          el.textContent = all[i];
+          sky.appendChild(el);
+          words.push({ el, text: all[i] });
+        }
+      }
+      while (words.length > all.length) words.pop().el.remove();
+      sky.scrollTop = sky.scrollHeight;
+    }
+    function resetTranscript() { words = []; sky.innerHTML = ''; }
+
+    function sparkle(el, aqua) {
+      const wrap = sky.getBoundingClientRect(); const r = el.getBoundingClientRect();
+      for (let k = 0; k < 7; k++) {
+        const s = document.createElement('div');
+        s.className = 'spark' + (aqua ? ' aqua' : '');
+        s.style.left = (r.left - wrap.left + sky.scrollLeft + Math.random() * r.width) + 'px';
+        s.style.top = (r.top - wrap.top + sky.scrollTop + r.height * 0.5) + 'px';
+        s.style.setProperty('--dx', ((Math.random() - .5) * 46) + 'px');
+        s.style.setProperty('--dy', (-18 - Math.random() * 30) + 'px');
+        s.style.setProperty('--dur', (0.6 + Math.random() * 0.5) + 's');
+        sky.appendChild(s); setTimeout(() => s.remove(), 1200);
+      }
+    }
+    function juice(startIdx, endIdx, kind) {
+      const cls = kind === 'correction' ? 'correction' : 'cmd-match';
+      for (let i = startIdx; i <= endIdx && i < words.length; i++) {
+        const el = words[i] && words[i].el; if (!el) continue;
+        el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); sparkle(el, kind === 'correction');
+      }
+    }
+    function findRange(text) {
+      const norm = (s) => s.toLowerCase().replace(/[^\w\s]/g, '').trim();
+      const needle = norm(text).split(/\s+/).filter(Boolean); if (!needle.length) return null;
+      const hay = words.map((w) => norm(w.text));
+      for (let i = 0; i + needle.length <= hay.length; i++) {
+        let ok = true; for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) { ok = false; break; }
+        if (ok) return [i, i + needle.length - 1];
+      }
+      return null;
+    }
+    function juicePhrase(text, kind, lightAll) {
+      const range = findRange(text || '');
+      if (range) { juice(range[0], range[1], kind); return; }
+      if (lightAll && words.length) juice(0, words.length - 1, kind);
+    }
+
+    function toast(msg) {
+      const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+      clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1900);
+    }
+
+    // ---- dispatch (mobile) ----
+    async function dispatch(verdict, groups, fullText) {
+      const a = verdict.action;
+      if (a === 'open_dashboard') { toast('✨ Command: open'); return; }
+      if (a === 'flag_bad_term') { addBadTerm(groups.term); toast('⚑ Flagged “' + groups.term + '”'); return; }
+      if (a === 'add_correction') { addCorrection(groups.to, groups.from); toast('✎ ' + groups.from + ' → ' + groups.to); return; }
+      if (a === 'add_correction_spelled') { const to = core.assembleSpelledWord(groups.spelled); if (to) { addCorrection(to, groups.from); toast('✎ ' + groups.from + ' → ' + to); } return; }
+      if (a === 'cave.send') {
+        const agent = groups.agent, message = groups.msg || fullText;
+        if (!caveUrl) { toast('Set CAVE URL in settings'); return; }
+        try {
+          const res = await fetch(caveUrl.replace(/\/$/, '') + '/cave_agents/' + encodeURIComponent(agent) + '/send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, ingress: 'frontend' }),
+          });
+          toast(res.ok ? '➤ Sent to ' + agent : 'CAVE ' + res.status);
+        } catch (e) { toast('CAVE unreachable'); }
+        return;
+      }
+    }
+
+    function addCorrection(intended, heard) {
+      intended = String(intended).trim(); heard = String(heard).trim().toLowerCase();
+      if (!intended || !heard) return;
+      corrections[intended] = corrections[intended] || [];
+      if (!corrections[intended].includes(heard)) corrections[intended].push(heard);
+      store.set('corrections', corrections); refreshCore(); renderVocab();
+    }
+    function addBadTerm(term) {
+      term = String(term).trim(); if (!term) return;
+      badTerms.push({ heard: term, at: new Date().toISOString() }); store.set('badTerms', badTerms); renderVocab();
+    }
+
+    // ---- finalize an utterance ----
+    function finalize(text) {
+      text = (text || '').replace(/\s+/g, ' ').trim(); if (!text) return;
+      const hit = core.classify('paste', text);
+      if (hit && hit.route.consume) {
+        juicePhrase(hit.match ? hit.match.text : text, hit.route.action === 'add_correction' || hit.route.action === 'add_correction_spelled' ? 'correction' : 'command', true);
+        dispatch(hit.route, hit.groups, text);
+        return;
+      }
+      // dictation: apply corrections, juice, copy
+      const c = core.applyCorrections(text);
+      if (c.spans.length) { render(c.text, ''); c.spans.forEach((s) => juice(s.wordStart, s.wordEnd, 'correction')); }
+      const out = c.text;
+      if (navigator.clipboard) navigator.clipboard.writeText(out).then(() => toast('📋 Copied'), () => toast('Copied (transcript)'));
+      else toast('Transcript ready');
+    }
+
+    // ---- Web Speech STT ----
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let rec = null, listening = false, committed = '';
+    const mic = document.getElementById('mic');
+
+    function startSTT() {
+      if (!SR) { document.getElementById('manual').classList.add('show'); toast('Speech not supported — type instead'); return; }
+      resetTranscript(); committed = '';
+      rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
+      rec.onresult = (ev) => {
+        let interim = '';
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const r = ev.results[i];
+          if (r.isFinal) { committed = (committed + ' ' + r[0].transcript).trim(); }
+          else interim += r[0].transcript;
+        }
+        render(committed, interim);
+      };
+      rec.onerror = (e) => { statusEl.textContent = 'mic: ' + e.error; };
+      rec.onend = () => { if (listening) { try { rec.start(); } catch (_) {} } }; // keep-alive while held on
+      try { rec.start(); listening = true; mic.classList.add('live'); statusEl.textContent = 'listening…'; }
+      catch (e) { statusEl.textContent = 'mic error'; }
+    }
+    function stopSTT() {
+      listening = false; mic.classList.remove('live'); statusEl.textContent = '';
+      if (rec) { try { rec.stop(); } catch (_) {} }
+      finalize(committed);
+    }
+    mic.addEventListener('click', () => { listening ? stopSTT() : startSTT(); });
+
+    // manual fallback
+    document.getElementById('manualSend').addEventListener('click', () => {
+      const inp = document.getElementById('manualInput'); const v = inp.value.trim();
+      if (!v) return; resetTranscript(); render(v, ''); finalize(v); inp.value = '';
+    });
+
+    // long-press a word to flag it
+    let pressTimer = null;
+    sky.addEventListener('touchstart', (e) => {
+      const el = e.target.closest && e.target.closest('.w'); if (!el) return;
+      pressTimer = setTimeout(() => { addBadTerm(el.textContent); toast('⚑ Flagged “' + el.textContent + '”'); }, 550);
+    }, { passive: true });
+    sky.addEventListener('touchend', () => clearTimeout(pressTimer));
+    sky.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+    // ---- settings sheet ----
+    const scrim = document.getElementById('scrim'), sheet = document.getElementById('sheet');
+    function openSheet() { renderVocab(); document.getElementById('caveUrl').value = caveUrl; scrim.classList.add('show'); sheet.classList.add('show'); }
+    function closeSheet() { scrim.classList.remove('show'); sheet.classList.remove('show'); }
+    document.getElementById('gear').addEventListener('click', openSheet);
+    scrim.addEventListener('click', closeSheet);
+    document.getElementById('caveUrl').addEventListener('change', (e) => { caveUrl = e.target.value.trim(); store.set('caveUrl', caveUrl); });
+    document.getElementById('corrHeard').addEventListener('keydown', addCorrFromInputs);
+    document.getElementById('corrIntended').addEventListener('keydown', addCorrFromInputs);
+    function addCorrFromInputs(e) {
+      if (e.key !== 'Enter') return;
+      const h = document.getElementById('corrHeard'), m = document.getElementById('corrIntended');
+      if (h.value.trim() && m.value.trim()) { addCorrection(m.value, h.value); h.value = ''; m.value = ''; toast('✎ Added'); }
+    }
+    function renderVocab() {
+      const cc = document.getElementById('corrChips');
+      cc.innerHTML = Object.keys(corrections).length
+        ? Object.entries(corrections).map(([k, v]) => `<span class="chip"><b>${k}</b> ← ${v.map(escapeHtml).join(', ')}</span>`).join('')
+        : '<span class="hint">No corrections yet.</span>';
+      const bc = document.getElementById('badChips');
+      const uniq = [...new Set(badTerms.map((b) => b.heard))];
+      bc.innerHTML = uniq.length ? uniq.map((t) => `<span class="chip">${escapeHtml(t)}</span>`).join('') : '<span class="hint">Nothing flagged.</span>';
+    }
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+    // ---- service worker (installable / offline shell) ----
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+    window.__vayu = { finalize, core }; // test hook
+  })();
+  </script>
+</body>
+</html>

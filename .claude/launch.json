@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vayu-mobile",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5599", "--directory", "mobile"],
+      "port": 5599
+    }
+  ]
+}
