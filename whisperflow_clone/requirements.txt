@@ -4,5 +4,7 @@ python-multipart==0.0.9
 openai-whisper==20250625
 torch
 numpy
+mlx-whisper>=0.4.0
+silero-vad>=5.0
 PyAudio==0.2.14
 websockets>=11.0

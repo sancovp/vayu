@@ -58,10 +58,21 @@ agentic reaction lives server-side in CAVE's `Automations()` (`EventAutomation` 
   Volume envelope: fast attack / slow decay driving the shader (`uVolume`).
 
 ### C. Transcription Server (`whisperflow_clone`, FastAPI :8181) — VENDORED
-* **Now lives INSIDE this repo** (`./whisperflow_clone`, OpenAI whisper + FastAPI, model
-  `tiny.en`). Was a gitless orphan in a scratch dir; vendored 2026-07-06 so the STT engine
-  ships and versions with Vayu. `.venv`/`__pycache__`/`*.pt` weights are gitignored (source
-  tracked; weights auto-download on first load).
+* **Now lives INSIDE this repo** (`./whisperflow_clone`, FastAPI). Was a gitless orphan in
+  a scratch dir; vendored 2026-07-06 so the STT engine ships and versions with Vayu.
+  `.venv`/`__pycache__`/`*.pt` weights are gitignored (source tracked; weights
+  auto-download on first load).
+* **Engine upgraded 2026-07-16 (the "worse than WhisperFlow" fix):** backend seam in
+  `src/transcriber.py` — default **mlx-whisper `large-v3-turbo`** (Metal-native, real-time
+  on M-series; WhisperFlow-parity accuracy), openai-whisper `tiny.en` retained as fallback
+  (`VAYU_STT_BACKEND` / `VAYU_WHISPER_MODEL` env). VAD upgraded from a bare amplitude
+  threshold (`max(abs)<500` — simultaneously too sensitive [clicks = "voice" →
+  hallucinations] and not sensitive enough [soft speech eaten]) to **silero-vad** with
+  per-chunk cached verdicts (`src/buffer.py`; `VAYU_VAD=amplitude` forces fallback). Also
+  fixed a 4x timing bug: durations now derive from byte lengths (old code assumed 64ms
+  chunks; the overlay sends 256ms chunks, so pause/max-segment thresholds ran 4x off). Plus
+  decode hardening: temperature fallback ladder, `condition_on_previous_text=False`,
+  segment-level hallucination gate. See `whisperflow_clone/DESIGN.md`.
 * **Vayu owns its lifecycle** (`main.js` `startWhisperServer`): health-checks `:8181`, and
   if nothing's up, bootstraps a venv in the **writable data dir** (`<DATA_DIR>/stt-venv`,
   NOT inside the signed bundle — so setup can't break the signature), pip-installs

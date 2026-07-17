@@ -19,7 +19,12 @@ logger = logging.getLogger("whisperflow_clone.server")
 async def lifespan(app: FastAPI):
     logger.info("Initializing server: preloading Whisper model...")
     try:
-        load_whisper_model()
+        model = load_whisper_model()
+        # Warm through the SAME executor path the worker uses — the first
+        # inference in the pool thread pays a multi-second one-time cost that
+        # must not land on the user's first utterance.
+        await transcribe_audio_chunks_async(model, [b"\x00" * 32000])
+        logger.info("Model warmed through executor path.")
     except Exception as e:
         logger.error(f"Failed to preload model: {e}")
     yield
@@ -44,12 +49,11 @@ async def transcription_worker(websocket: WebSocket, model, audio_buffer: AudioB
     stable_count = 0
     max_stable_cycles = 2
     
-    BYTES_PER_SEC = 16000 * 2          # 16kHz mono int16
     SILENT_FINALIZE_SEC = 0.8           # pause closes the segment immediately
     MAX_SEGMENT_SEC = 15.0              # force-close before the window can slide
     MIN_VOICED_SEC = 0.25               # never transcribe a buffer with less real
-                                        # speech than this — whisper tiny.en
-                                        # hallucinates ("Thank you.") on silence
+                                        # speech than this — whisper hallucinates
+                                        # ("Thank you.") on silence
 
     logger.info("Transcription worker started.")
     try:
@@ -57,58 +61,54 @@ async def transcription_worker(websocket: WebSocket, model, audio_buffer: AudioB
             # Poll every 250ms
             await asyncio.sleep(0.25)
 
-            chunks = audio_buffer.get_chunks()
+            # SNAPSHOT the buffer: audio keeps streaming in while inference
+            # runs, and everything below (heuristics + segment close) must be
+            # about what this pass actually transcribed, not the live buffer.
+            chunks = list(audio_buffer.get_chunks())
+            n_snapshot = len(chunks)
             if not chunks:
                 continue
 
-            # Silence gate: skip inference entirely until the buffer holds
-            # enough voiced audio (kills silence hallucinations + saves compute)
-            voiced_sec = sum(
-                len(c) / BYTES_PER_SEC for c in chunks
-                if not audio_buffer.is_silent(c)
-            )
-            if voiced_sec < MIN_VOICED_SEC:
+            # VAD gate: skip inference entirely until the buffer holds enough
+            # real speech (kills silence hallucinations + saves compute).
+            # Verdicts are silero-based and cached per chunk in the buffer.
+            if audio_buffer.voiced_seconds() < MIN_VOICED_SEC:
                 continue
 
             # Run transcription asynchronously in thread pool, biased toward the
             # user's vocabulary (Vayu maintains whisper_bias.txt; read cheaply,
-            # cached by mtime). This is what steers tiny.en toward "vayu" etc.
+            # cached by mtime). This is what steers decoding toward "vayu" etc.
             result = await transcribe_audio_chunks_async(model, chunks, initial_prompt=read_bias())
             text = result.get("text", "").strip()
-            
+
             if not text:
                 continue
-                
-            # Check for silence or segment end heuristics
-            # Let's count silence chunks at the end of our current buffer
-            # to see if the speaker paused.
-            trailing_silence_sec = 0.0
-            # Check the last 15 chunks (about ~0.5 seconds of audio)
-            chunk_sec = 1024 / 16000  # 64ms per chunk
-            for chunk in reversed(chunks[-15:]):
-                if audio_buffer.is_silent(chunk):
-                    trailing_silence_sec += chunk_sec
-                else:
-                    break
-            
+
+            # Segment-end heuristics over the SNAPSHOT (real durations derived
+            # from byte lengths — the old code hardcoded 64ms/chunk while the
+            # overlay sends 256ms chunks, so every threshold ran 4x off).
+            trailing_silence_sec = audio_buffer.trailing_silence_seconds(upto=n_snapshot)
+
             is_partial = True
             if text == prev_text:
                 stable_count += 1
             else:
                 stable_count = 0
                 prev_text = text
-                
-            buffered_sec = len(chunks) * chunk_sec
-            
+
+            buffered_sec = AudioBuffer.seconds_of(chunks)
+
             should_close = text and (
                 stable_count >= max_stable_cycles
                 or trailing_silence_sec >= SILENT_FINALIZE_SEC
                 or buffered_sec >= MAX_SEGMENT_SEC
             )
-            
+
             if should_close:
                 is_partial = False
-                audio_buffer.clear()
+                # Drop ONLY what this segment consumed; clear() would eat
+                # audio that arrived during inference (start of next utterance).
+                audio_buffer.drop_first(n_snapshot)
                 prev_text = ""
                 stable_count = 0
                 logger.info(f"Segment closed: '{text}'")
