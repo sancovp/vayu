@@ -16,4 +16,4 @@
 | 4x chunk-timing fix | BUILT | old code assumed 64ms chunks vs real 256ms |
 | stt-venv at `<DATA_DIR>/stt-venv` | BUILT | where main.js health-check/spawn expects it |
 | stale scratch server killed | see session | `~/.gemini/antigravity/scratch/whisperflow_clone` ran the LIVE STT until 2026-07-16 (0.0.0.0, no bias, tiny.en) — never serve from it again |
-| packaged `/Applications/Vayu.app` | STALE | bundles the pre-fix whisperflow_clone; needs `npm run package-mac` re-pack. Until then: if the canonical server isn't already on :8181 at app launch, the app spawns its OLD bundled code into the NEW venv |
+| packaged `/Applications/Vayu.app` | RE-PACKED 2026-08-07 | was frozen at the **Jul-5** build, which predates `startWhisperServer` (added Jul-16, `c00a255`) and bundled **no** `whisperflow_clone` at all — so the app never started :8181 and every dictation died as `Transcriber WS error: [object Event]` (connection refused). Re-packed from `cd17d67` via `npm run package-mac`, signed "Vayu Local Code Signing"; bundle now carries `main.js` with `startWhisperServer` + the vendored `whisperflow_clone/src`, so the app owns its own STT lifecycle |
