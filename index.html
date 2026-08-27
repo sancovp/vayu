@@ -450,8 +450,32 @@
   rendererFs.mkdirSync(rendererDataDir, { recursive: true });
   const rendererLogPath = rendererPath.join(rendererDataDir, 'vayu_renderer.log');
 
+  // HARD CAP: no Vayu log may ever exceed 50 KB (same law as main.js). This one
+  // runs for the whole app lifetime and logs per-utterance, so it must self-trim
+  // rather than grow forever.
+  const RENDERER_LOG_MAX_BYTES = 50 * 1024;
+  const RENDERER_LOG_KEEP_BYTES = 25 * 1024;
+  let rendererLogBytes = null;
+
   function rendererLog(message) {
-    rendererFs.appendFileSync(rendererLogPath, `${new Date().toISOString()} ${message}\n`);
+    try {
+      if (rendererLogBytes === null) {
+        try { rendererLogBytes = rendererFs.statSync(rendererLogPath).size; } catch (e) { rendererLogBytes = 0; }
+      }
+      const line = `${new Date().toISOString()} ${message}\n`;
+      rendererFs.appendFileSync(rendererLogPath, line);
+      rendererLogBytes += Buffer.byteLength(line);
+      if (rendererLogBytes > RENDERER_LOG_MAX_BYTES) {
+        const buf = rendererFs.readFileSync(rendererLogPath);
+        let tail = buf.subarray(Math.max(0, buf.length - RENDERER_LOG_KEEP_BYTES));
+        const nl = tail.indexOf(0x0a); // resume at a line boundary
+        if (nl >= 0) tail = tail.subarray(nl + 1);
+        rendererFs.writeFileSync(rendererLogPath, tail);
+        rendererLogBytes = tail.length;
+      }
+    } catch (e) {
+      // Logging must never break dictation.
+    }
   }
 
   // Global renderer error logger
@@ -751,7 +775,8 @@
       };
       
       wsTranscriber.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        let data;
+        try { data = JSON.parse(event.data); } catch (e) { return; }
         if (data.text) {
           applyTranscriberMessage(data);
           rendererLog(`transcriber ${data.is_partial === false ? 'final' : 'partial'} length=${transcribedText.length}`);
@@ -761,6 +786,9 @@
             ipcRenderer.send('vayu-utterance-final', { text: normalizeTranscriptText(data.text) });
           }
         }
+        // Flush ack — release the stop path (see flushTranscriber). Applied here
+        // and ONLY here, so the message is never counted twice.
+        if (data.flushed) resolvePendingFlush(true);
       };
       
       wsTranscriber.onerror = (err) => {
@@ -857,11 +885,12 @@
     }
   }
 
-  function stopRecording() {
-    rendererLog(`stopRecording called wasRecording=${isRecording}`);
+  // Stop the microphone WITHOUT closing the transcriber socket. The socket has
+  // to outlive the mic for exactly as long as the flush takes — see stopAndPaste.
+  function stopCapture() {
     isRecording = false;
     volumeVal = 0.05;
-    
+
     if (scriptProcessor) {
       scriptProcessor.disconnect();
       scriptProcessor = null;
@@ -874,9 +903,56 @@
       mediaStream.getTracks().forEach(track => track.stop());
       mediaStream = null;
     }
+  }
+
+  function closeTranscriberSocket() {
     if (wsTranscriber && wsTranscriber.readyState === WebSocket.OPEN) {
       wsTranscriber.close();
     }
+  }
+
+  // Ask the server to transcribe the tail of the utterance and close the segment,
+  // then WAIT for that final before we read transcribedText.
+  //
+  // Why this exists: the server's segment-close rules (2 stable passes / 0.8s
+  // trailing silence / 15s cap) are all free-running heuristics, and NONE of them
+  // can fire when the user stops talking and releases the hotkey in one motion.
+  // Closing the socket there cancels the worker with the utterance still
+  // untranscribed — the buffer is discarded and nothing is pasted. Measured: the
+  // same 4.8s of speech yields a full transcript when the stream is allowed to
+  // settle, and ZERO finals when the socket closes immediately.
+  let pendingFlushResolve = null;
+
+  function resolvePendingFlush(ok) {
+    if (!pendingFlushResolve) return;
+    const resolve = pendingFlushResolve;
+    pendingFlushResolve = null;
+    resolve(ok);
+  }
+
+  function flushTranscriber(timeoutMs = 3000) {
+    return new Promise((resolve) => {
+      if (!wsTranscriber || wsTranscriber.readyState !== WebSocket.OPEN) return resolve(false);
+      // A dropped socket must never hang the stop path.
+      const timer = setTimeout(() => {
+        rendererLog('flush timed out — pasting what arrived');
+        resolvePendingFlush(false);
+      }, timeoutMs);
+      pendingFlushResolve = (ok) => { clearTimeout(timer); resolve(ok); };
+      try {
+        wsTranscriber.send(JSON.stringify({ cmd: 'flush' }));
+      } catch (e) {
+        rendererLog(`flush send failed ${e && e.message ? e.message : e}`);
+        resolvePendingFlush(false);
+      }
+    });
+  }
+
+  // Back-compat for the error path in startRecording: tear everything down.
+  function stopRecording() {
+    rendererLog(`stopRecording called wasRecording=${isRecording}`);
+    stopCapture();
+    closeTranscriberSocket();
   }
 
   let pressStartTime = 0;
@@ -912,8 +988,13 @@
       return;
     }
     isStoppingRecording = true;
-    rendererLog(`stopAndPaste called textLength=${transcribedText.trim().length}`);
-    stopRecording();
+    // ORDER MATTERS: mic off first (no more audio enters the buffer), then flush
+    // and WAIT for the tail, and only then close the socket. Reading
+    // transcribedText before the flush returns is what used to paste nothing.
+    stopCapture();
+    const flushed = await flushTranscriber();
+    closeTranscriberSocket();
+    rendererLog(`stopAndPaste flushed=${flushed} textLength=${transcribedText.trim().length}`);
 
     let shouldPaste = false;
     let juiceHoldMs = 120; // extended when a command/correction juices the words

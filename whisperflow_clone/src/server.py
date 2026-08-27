@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import asyncio
 from contextlib import asynccontextmanager
@@ -44,28 +45,63 @@ async def get_index():
 async def health():
     return {"status": "healthy", "service": "whisperflow_clone"}
 
-async def transcription_worker(websocket: WebSocket, model, audio_buffer: AudioBuffer):
+async def transcription_worker(websocket: WebSocket, model, audio_buffer: AudioBuffer,
+                               flush_event: asyncio.Event):
     prev_text = ""
     stable_count = 0
     max_stable_cycles = 2
-    
+
     SILENT_FINALIZE_SEC = 0.8           # pause closes the segment immediately
     MAX_SEGMENT_SEC = 15.0              # force-close before the window can slide
     MIN_VOICED_SEC = 0.25               # never transcribe a buffer with less real
                                         # speech than this — whisper hallucinates
                                         # ("Thank you.") on silence
+    FLUSH_MIN_VOICED_SEC = 0.10         # on an explicit flush the user DID speak,
+                                        # so accept a shorter tail than the
+                                        # free-running gate would
 
     logger.info("Transcription worker started.")
     try:
         while True:
-            # Poll every 250ms
-            await asyncio.sleep(0.25)
+            # Poll every 250ms — but wake IMMEDIATELY when the client asks to
+            # flush, so releasing the hotkey doesn't cost an extra poll.
+            flushing = False
+            try:
+                await asyncio.wait_for(flush_event.wait(), timeout=0.25)
+                flushing = True
+            except asyncio.TimeoutError:
+                pass
 
             # SNAPSHOT the buffer: audio keeps streaming in while inference
             # runs, and everything below (heuristics + segment close) must be
             # about what this pass actually transcribed, not the live buffer.
             chunks = list(audio_buffer.get_chunks())
             n_snapshot = len(chunks)
+
+            if flushing:
+                # THE STOP PATH. The client has stopped the mic and is waiting
+                # to paste. Transcribe whatever is left RIGHT NOW and close the
+                # segment unconditionally — the free-running heuristics (2 stable
+                # passes / 0.8s trailing silence / 15s cap) can never fire here,
+                # because the user stops talking and releases the key in the same
+                # motion. Without this the worker is cancelled mid-utterance and
+                # the whole segment is silently discarded.
+                flush_event.clear()
+                text = ""
+                if chunks and audio_buffer.voiced_seconds() >= FLUSH_MIN_VOICED_SEC:
+                    result = await transcribe_audio_chunks_async(
+                        model, chunks, initial_prompt=read_bias())
+                    text = result.get("text", "").strip()
+                audio_buffer.drop_first(n_snapshot)
+                prev_text = ""
+                stable_count = 0
+                logger.info(f"Flush closed segment: '{text}'")
+                # ALWAYS ack, even with empty text — the client blocks on this
+                # message, and a silent flush must not cost it the full timeout.
+                await websocket.send_json(
+                    {"is_partial": False, "text": text, "flushed": True})
+                continue
+
             if not chunks:
                 continue
 
@@ -130,15 +166,34 @@ async def websocket_endpoint(websocket: WebSocket):
     
     model = load_whisper_model()
     audio_buffer = AudioBuffer()
-    
+    flush_event = asyncio.Event()
+
     # Start background transcription worker
-    worker_task = asyncio.create_task(transcription_worker(websocket, model, audio_buffer))
-    
+    worker_task = asyncio.create_task(
+        transcription_worker(websocket, model, audio_buffer, flush_event))
+
     try:
         while True:
-            data = await websocket.receive_bytes()
+            # receive() rather than receive_bytes(): the socket carries BOTH the
+            # PCM stream (binary) and control commands (text, e.g. {"cmd":"flush"}
+            # sent when the user releases the hotkey).
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                raise WebSocketDisconnect(message.get("code", 1000))
+
+            data = message.get("bytes")
             if data:
                 audio_buffer.add_chunk(data)
+                continue
+
+            raw = message.get("text")
+            if raw:
+                try:
+                    cmd = json.loads(raw).get("cmd")
+                except Exception:
+                    cmd = None
+                if cmd == "flush":
+                    flush_event.set()
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected.")
     except Exception as e:

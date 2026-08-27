@@ -17,12 +17,76 @@ const DATA_DIR = process.env.VAYU_DATA_DIR || path.join(os.homedir(), 'Library',
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// Create a log stream for the helper in the workspace folder
-const logStream = fs.createWriteStream(path.join(DATA_DIR, 'vayu_daemon.log'), { flags: 'w' });
+// ===== Bounded logging =====
+// HARD CAP: no Vayu log may ever exceed 50 KB. These files are append-only and
+// the app runs for weeks, so an uncapped writer is a disk leak — vayu_runtime.log
+// reached 73 MB (mostly one line per SPACEBAR PRESS) before this cap existed.
+// Two defences, both required:
+//   1. never write per-keystroke noise at all (see isNoiseLine)
+//   2. trim the file to the newest half whenever it crosses the cap
+const LOG_MAX_BYTES = 50 * 1024;
+const LOG_KEEP_BYTES = 25 * 1024;
+
+const RUNTIME_LOG = path.join(DATA_DIR, 'vayu_runtime.log');
+const DAEMON_LOG = path.join(DATA_DIR, 'vayu_daemon.log');
+
+// Per-keystroke helper chatter ("debug space down"). It is emitted for EVERY
+// key the user ever types, carries no diagnostic value, and was the entire
+// 73 MB. Never persist it.
+function isNoiseLine(message) {
+  return /^helper (stdout|stderr) debug /.test(message) || /^debug /.test(message);
+}
+
+const logSizes = Object.create(null);
+
+function writeCapped(file, line) {
+  try {
+    if (logSizes[file] === undefined) {
+      try { logSizes[file] = fs.statSync(file).size; } catch (e) { logSizes[file] = 0; }
+    }
+    fs.appendFileSync(file, line);
+    logSizes[file] += Buffer.byteLength(line);
+    if (logSizes[file] > LOG_MAX_BYTES) {
+      const buf = fs.readFileSync(file);
+      let tail = buf.subarray(Math.max(0, buf.length - LOG_KEEP_BYTES));
+      const nl = tail.indexOf(0x0a); // start at a line boundary, not mid-line
+      if (nl >= 0) tail = tail.subarray(nl + 1);
+      fs.writeFileSync(file, tail);
+      logSizes[file] = tail.length;
+    }
+  } catch (e) {
+    // Logging must never take the app down.
+  }
+}
+
+// Collapse identical consecutive messages. Vayu retries some things on a timer
+// (e.g. `cave: listAgents failed`, once a minute forever), and without this the
+// cap just means the useful history scrolls away behind the same repeated line.
+let lastRuntimeMessage = null;
+let suppressedRepeats = 0;
 
 function appendRuntimeLog(message) {
-  fs.appendFileSync(path.join(DATA_DIR, 'vayu_runtime.log'), `${new Date().toISOString()} ${message}\n`);
+  if (isNoiseLine(message)) return;
+  if (message === lastRuntimeMessage) { suppressedRepeats++; return; }
+  if (suppressedRepeats > 0) {
+    writeCapped(RUNTIME_LOG, `${new Date().toISOString()} ... previous line repeated ${suppressedRepeats}x\n`);
+    suppressedRepeats = 0;
+  }
+  lastRuntimeMessage = message;
+  writeCapped(RUNTIME_LOG, `${new Date().toISOString()} ${message}\n`);
 }
+
+// Same discipline for the helper log. Shaped like a WriteStream so existing
+// `logStream.write(...)` call sites keep working unchanged.
+const logStream = {
+  write(text) {
+    const body = String(text).replace(/\n$/, '');
+    if (!body || isNoiseLine(body) || /^Vayu Helper: debug /.test(body)) return;
+    writeCapped(DAEMON_LOG, `${body}\n`);
+  },
+};
+
+try { fs.writeFileSync(DAEMON_LOG, ''); logSizes[DAEMON_LOG] = 0; } catch (e) {}
 
 // Error logging
 process.on('uncaughtException', (err) => {
