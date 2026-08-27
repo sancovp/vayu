@@ -517,6 +517,8 @@
   // Audio Recording State
   let audioContext = null;
   let mediaStream = null;
+  // Per-recording mic level meter (see startRecording / stopCapture)
+  let micLevelSum = 0, micLevelPeak = 0, micLevelCount = 0, sentChunks = 0;
   let scriptProcessor = null;
   let wsTranscriber = null;
   let wsDaemon = null;
@@ -822,34 +824,46 @@
       if (!wsTranscriber || wsTranscriber.readyState !== WebSocket.OPEN) {
         await connectTranscriberWS();
       }
-      
-      // Request mic access
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      rendererLog(`microphone stream acquired tracks=${mediaStream.getTracks().length}`);
-      
+
+      // Acquire the mic ONCE and keep the stream alive across recordings.
+      // Opening it fresh per recording cost 3.6s on first use (measured) —
+      // the user starts talking the instant they hit the hotkey, so everything
+      // said before the stream opened was silently lost. The recording gate is
+      // isRecording, not stream lifetime.
+      if (!mediaStream || mediaStream.getTracks().every((t) => t.readyState !== 'live')) {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const label = (mediaStream.getAudioTracks()[0] || {}).label || 'unknown device';
+        rendererLog(`microphone stream acquired tracks=${mediaStream.getTracks().length} device="${label}"`);
+      }
+
       // Initialize AudioContext downsampled to 16kHz
       audioContext = new (window.AudioContext || window.webkitAudioContext)({
         sampleRate: 16000
       });
-      
+
       // Force AudioContext to resume (necessary for Chromium sandboxes)
       await audioContext.resume();
-      
+
       const source = audioContext.createMediaStreamSource(mediaStream);
-      
+
+      // Level meter for the WHOLE recording — so "the mic delivered silence"
+      // is a fact in the log, not a guess. Reset per recording, reported at stop.
+      micLevelSum = 0; micLevelPeak = 0; micLevelCount = 0; sentChunks = 0;
+
       // ScriptProcessor node to downsample to 16-bit signed PCM
       scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
       scriptProcessor.onaudioprocess = (event) => {
         if (!isRecording || !wsTranscriber || wsTranscriber.readyState !== WebSocket.OPEN) return;
-        
+
         const inputData = event.inputBuffer.getChannelData(0);
-        
+
         // Calculate volume directly from raw floats (RMS)
         let sumSquares = 0;
         for (let i = 0; i < inputData.length; i++) {
           sumSquares += inputData[i] * inputData[i];
         }
         const rms = Math.sqrt(sumSquares / inputData.length);
+        micLevelSum += rms; micLevelPeak = Math.max(micLevelPeak, rms); micLevelCount++;
         
         // Map RMS to an exaggerated visualizer volume: hot gain + soft-knee
         // compression so quiet speech still moves the wave visibly
@@ -867,6 +881,7 @@
         }
         // Send raw PCM bytes directly
         wsTranscriber.send(pcmBuffer.buffer);
+        sentChunks++;
       };
       
       source.connect(scriptProcessor);
@@ -885,11 +900,20 @@
     }
   }
 
-  // Stop the microphone WITHOUT closing the transcriber socket. The socket has
-  // to outlive the mic for exactly as long as the flush takes — see stopAndPaste.
+  // Stop the recording WITHOUT closing the transcriber socket (it has to
+  // outlive the mic for exactly as long as the flush takes — see stopAndPaste)
+  // and WITHOUT releasing the mediaStream: reopening the mic cost up to 3.6s
+  // (measured), during which everything the user said was lost. The stream
+  // stays hot for the app's lifetime; isRecording gates what is sent.
   function stopCapture() {
     isRecording = false;
     volumeVal = 0.05;
+
+    // The whole recording's audio-level truth, one line: avg/peak RMS and how
+    // many chunks actually went to the server. avg≈0 = the mic delivered
+    // silence (wrong input device / OS-level mute), NOT a transcription bug.
+    const avg = micLevelCount ? (micLevelSum / micLevelCount) : 0;
+    rendererLog(`capture stats: chunks=${sentChunks} avgRMS=${avg.toFixed(4)} peakRMS=${micLevelPeak.toFixed(4)}${avg < 0.001 ? ' — MIC DELIVERED SILENCE' : ''}`);
 
     if (scriptProcessor) {
       scriptProcessor.disconnect();
@@ -899,6 +923,10 @@
       audioContext.close();
       audioContext = null;
     }
+  }
+
+  // Release the mic for real (app teardown only).
+  function releaseMicStream() {
     if (mediaStream) {
       mediaStream.getTracks().forEach(track => track.stop());
       mediaStream = null;
@@ -930,7 +958,7 @@
     resolve(ok);
   }
 
-  function flushTranscriber(timeoutMs = 3000) {
+  function flushTranscriber(timeoutMs = 5000) {
     return new Promise((resolve) => {
       if (!wsTranscriber || wsTranscriber.readyState !== WebSocket.OPEN) return resolve(false);
       // A dropped socket must never hang the stop path.
@@ -948,10 +976,13 @@
     });
   }
 
-  // Back-compat for the error path in startRecording: tear everything down.
+  // Back-compat for the error path in startRecording: tear everything down,
+  // including the hot mic stream (a failed start may mean the stream is bad —
+  // let the next start reacquire it).
   function stopRecording() {
     rendererLog(`stopRecording called wasRecording=${isRecording}`);
     stopCapture();
+    releaseMicStream();
     closeTranscriberSocket();
   }
 
@@ -1136,6 +1167,19 @@
   window.onload = () => {
     rendererLog('window.onload initWebGL');
     initWebGL();
+
+    // Pre-warm the microphone so the FIRST dictation doesn't lose speech.
+    // The first getUserMedia after launch took 3.6s (measured 2026-08-27);
+    // the user starts talking the instant they hit the hotkey, so that whole
+    // window of speech was lost. Acquired once here, the stream stays hot
+    // (see stopCapture) and startRecording reuses it instantly.
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      mediaStream = stream;
+      const label = (stream.getAudioTracks()[0] || {}).label || 'unknown device';
+      rendererLog(`mic pre-warmed device="${label}"`);
+    }).catch((err) => {
+      rendererLog(`mic pre-warm failed ${err && err.message ? err.message : err}`);
+    });
   };
 </script>
 </body>

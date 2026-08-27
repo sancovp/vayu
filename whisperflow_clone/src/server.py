@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from starlette.websockets import WebSocketDisconnect
 
 from whisperflow_clone.src.transcriber import load_whisper_model, transcribe_audio_chunks_async
-from whisperflow_clone.src.buffer import AudioBuffer
+from whisperflow_clone.src.buffer import AudioBuffer, BYTES_PER_SEC
 from whisperflow_clone.src.bias import read_bias
 
 # Setup simple logging
@@ -172,6 +172,8 @@ async def websocket_endpoint(websocket: WebSocket):
     worker_task = asyncio.create_task(
         transcription_worker(websocket, model, audio_buffer, flush_event))
 
+    n_audio_frames = 0
+    n_audio_bytes = 0
     try:
         while True:
             # receive() rather than receive_bytes(): the socket carries BOTH the
@@ -184,10 +186,16 @@ async def websocket_endpoint(websocket: WebSocket):
             data = message.get("bytes")
             if data:
                 audio_buffer.add_chunk(data)
+                n_audio_frames += 1
+                n_audio_bytes += len(data)
                 continue
 
             raw = message.get("text")
-            if raw:
+            if raw is not None:
+                # Control frames are rare and small — log them verbatim so a
+                # flush that never fires is visible as either "arrived but
+                # unparsed" or "never arrived at all".
+                logger.info(f"control frame: {raw[:200]!r}")
                 try:
                     cmd = json.loads(raw).get("cmd")
                 except Exception:
@@ -195,7 +203,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 if cmd == "flush":
                     flush_event.set()
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected.")
+        logger.info(
+            f"WebSocket client disconnected. Session totals: "
+            f"{n_audio_frames} audio frames, {n_audio_bytes} bytes "
+            f"({n_audio_bytes / BYTES_PER_SEC:.2f}s), "
+            f"voiced={audio_buffer.voiced_seconds():.2f}s")
     except Exception as e:
         logger.error(f"Error in WebSocket session: {e}", exc_info=True)
     finally:
