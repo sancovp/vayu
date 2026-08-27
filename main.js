@@ -103,16 +103,24 @@ process.on('unhandledRejection', (reason) => {
 
 function startDaemon() {
   appendRuntimeLog('startDaemon called');
-  // Clear any existing orphaned helper binaries
-  try {
-    const { execSync } = require('child_process');
-    execSync('pkill -9 -f "/helper"');
-  } catch (e) {}
 
   // In packaged app, macOS execution policies require binaries to reside in Contents/MacOS
   const helperPath = app.isPackaged
     ? path.join(__dirname, '..', '..', 'MacOS', 'helper')
     : path.join(__dirname, 'helper');
+
+  // Reap orphaned helpers from a previous crashed run — BY OUR OWN ABSOLUTE PATH.
+  // This used to be `pkill -9 -f "/helper"`, which SIGKILLs every process on the
+  // machine whose command line contains the substring "/helper" — any other app's
+  // helper binary included. It happened to match only our own helper here, but it
+  // is a loaded gun pointed at the rest of the user's machine and it fires on
+  // every single launch. Match the full path, which is unique to this app.
+  try {
+    const { execSync } = require('child_process');
+    execSync(`pkill -9 -f ${JSON.stringify(helperPath)}`, { stdio: 'ignore' });
+  } catch (e) {
+    // pkill exits 1 when nothing matched — that is the normal case, not an error.
+  }
 
   logStream.write(`Vayu: Attempting to spawn native helper at ${helperPath}...\n`);
 
