@@ -819,6 +819,43 @@ if (!gotTheLock) {
   });
 }
 
+// ===== Graceful quit: never kill a dictation that is still processing =====
+// Every quit path (tray, Cmd+Shift+Q, restart, permission dialogs) funnels
+// through app.quit(), and 'before-quit' intercepts them all in one place.
+// The renderer flags the stop-cycle (flush -> corrections -> clipboard ->
+// paste) as busy; quitting mid-cycle discards the user's utterance. Defer the
+// quit until the cycle completes — bounded at 10s so a stuck flag can never
+// make the app unquittable.
+const PROCESSING_QUIT_GRACE_MS = 10000;
+let processingBusy = false;
+let processingBusySince = 0;
+let quitWaitTimer = null;
+
+ipcMain.on('vayu-processing', (event, busy) => {
+  processingBusy = !!busy;
+  processingBusySince = Date.now();
+});
+
+app.on('before-quit', (event) => {
+  const stillBusy = processingBusy &&
+    (Date.now() - processingBusySince) < PROCESSING_QUIT_GRACE_MS;
+  if (!stillBusy || quitWaitTimer) return;
+
+  event.preventDefault();
+  appendRuntimeLog('quit deferred — dictation still processing');
+  quitWaitTimer = setInterval(() => {
+    const expired = (Date.now() - processingBusySince) >= PROCESSING_QUIT_GRACE_MS;
+    if (!processingBusy || expired) {
+      clearInterval(quitWaitTimer);
+      // Leave quitWaitTimer set: it marks "already waited once" so the
+      // re-entrant before-quit lets this quit through even if the flag is
+      // somehow busy again.
+      appendRuntimeLog(`quit resumed${expired ? ' (grace period expired)' : ''}`);
+      app.quit();
+    }
+  }, 200);
+});
+
 app.on('will-quit', () => {
   appendRuntimeLog('app will-quit');
   globalShortcut.unregisterAll();

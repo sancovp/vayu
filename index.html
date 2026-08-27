@@ -996,6 +996,7 @@
       rendererLog('paste blocked pending Accessibility permission for Vayu.app');
       setStatusText('Grant Vayu Accessibility, then try again.');
       ipcRenderer.invoke('show-accessibility-help');
+      ipcRenderer.send('vayu-processing', false); // cycle over — quit may proceed
       return;
     }
 
@@ -1010,6 +1011,7 @@
       } else {
         rendererLog(`paste complete helper=${helperPath}`);
       }
+      ipcRenderer.send('vayu-processing', false); // paste landed (or failed) — cycle over
     });
   }
 
@@ -1019,6 +1021,9 @@
       return;
     }
     isStoppingRecording = true;
+    // Tell main we're mid-cycle so a quit (tray, Cmd+Shift+Q, restart) waits
+    // for the paste to land instead of discarding the utterance.
+    ipcRenderer.send('vayu-processing', true);
     // ORDER MATTERS: mic off first (no more audio enters the buffer), then flush
     // and WAIT for the tail, and only then close the socket. Reading
     // transcribedText before the flush returns is what used to paste nothing.
@@ -1089,6 +1094,9 @@
         ipcRenderer.send('hide-window');
         if (shouldPaste) {
           setTimeout(pasteClipboardIntoFrontmostApp, 350);
+          // vayu-processing goes false inside the paste itself, once it lands
+        } else {
+          ipcRenderer.send('vayu-processing', false); // nothing to paste — cycle over
         }
         isStoppingRecording = false;
       }, 300);
