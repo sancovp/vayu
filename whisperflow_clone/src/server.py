@@ -21,6 +21,20 @@ _active_sessions = 0
 KEEPWARM_INTERVAL_SEC = 240   # 4 min — well inside the idle horizon that went cold
 
 
+def _warm_audio() -> bytes:
+    """REAL speech for warm-ups. All-zero audio decodes trivially and leaves the
+    actual decode path cold — measured: a probe 30s after the silence warm-up
+    still hit a >3s first inference and lost the utterance. 3s of recorded
+    speech (warmup.pcm, checked in) exercises the same kernels a dictation does."""
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "warmup.pcm")
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except OSError:
+        logger.warning("warmup.pcm missing — falling back to silence (weak warm-up)")
+        return b"\x00" * 32000
+
+
 async def _keepwarm_loop(model):
     """Run a tiny inference on a cadence so the model NEVER goes cold.
 
@@ -39,7 +53,7 @@ async def _keepwarm_loop(model):
             continue  # a real session is already keeping everything hot
         try:
             t0 = asyncio.get_event_loop().time()
-            await transcribe_audio_chunks_async(model, [b"\x00" * 16000])
+            await transcribe_audio_chunks_async(model, [_warm_audio()], initial_prompt=read_bias())
             took = asyncio.get_event_loop().time() - t0
             beats += 1
             # One line an hour is enough to prove liveness; a slow beat is the
@@ -57,11 +71,16 @@ async def lifespan(app: FastAPI):
     keepwarm_task = None
     try:
         model = load_whisper_model()
-        # Warm through the SAME executor path the worker uses — the first
-        # inference in the pool thread pays a multi-second one-time cost that
-        # must not land on the user's first utterance.
-        await transcribe_audio_chunks_async(model, [b"\x00" * 32000])
-        logger.info("Model warmed through executor path.")
+        # Warm through the SAME executor path AND the same decode shape the
+        # worker uses: REAL speech + the bias prompt. (A silence warm-up left
+        # the real decode path cold — see _warm_audio.)
+        t0 = asyncio.get_event_loop().time()
+        await transcribe_audio_chunks_async(model, [_warm_audio()], initial_prompt=read_bias())
+        logger.info(f"Model warmed on real speech in {asyncio.get_event_loop().time() - t0:.2f}s.")
+        # Pre-load silero VAD too — its first call otherwise lands inside the
+        # first session's receive loop and stalls it for the load duration.
+        AudioBuffer().add_chunk(_warm_audio()[:8192])
+        logger.info("VAD warmed.")
         keepwarm_task = asyncio.create_task(_keepwarm_loop(model))
     except Exception as e:
         logger.error(f"Failed to preload model: {e}")
