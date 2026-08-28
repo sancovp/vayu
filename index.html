@@ -272,6 +272,38 @@
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
     pointer-events: none;
   }
+
+  /* "Listening…" shimmer — fills the ~2s between hotkey and the first partial
+     (audio IS being captured that whole time; this makes the gap read as
+     intentional instead of dead). Sits where the first word will land and
+     fades out the instant real words arrive. */
+  #listening-shimmer {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background: linear-gradient(100deg,
+      rgba(28, 75, 102, 0.35) 30%,
+      rgba(255, 255, 255, 0.95) 50%,
+      rgba(28, 75, 102, 0.35) 70%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: shimmer-sweep 1.5s linear infinite;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+  #listening-shimmer.on { opacity: 1; }
+  @keyframes shimmer-sweep {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -120% 0; }
+  }
   
   #wave-wrapper {
     position: relative;
@@ -333,6 +365,7 @@
         <span class="sky-leaf" style="top: 58%; --dur: 8s;  --delay: -6s; scale: 0.8;"></span>
       </div>
       <div id="sky-page"></div>
+      <div id="listening-shimmer">Listening&hellip;</div>
       <div id="status-text"></div>
     </div>
   </div>
@@ -505,6 +538,7 @@
   const container = document.getElementById('container');
   const skyPage = document.getElementById('sky-page');
   const statusText = document.getElementById('status-text');
+  const listeningShimmer = document.getElementById('listening-shimmer');
   const wordCount = document.getElementById('word-count');
   const canvas = document.getElementById('gl');
   const openAppTab = document.getElementById('open-app-tab');
@@ -567,7 +601,10 @@
     const partialWords = currentPartial ? currentPartial.split(" ") : [];
     const words = committedWords.concat(partialWords);
     wordCount.textContent = `${words.length} ${words.length === 1 ? 'word' : 'words'}`;
-    if (words.length) setStatusText("");
+    if (words.length) {
+      setStatusText("");
+      listeningShimmer.classList.remove('on'); // real words arrived — shimmer done
+    }
 
     for (let i = 0; i < words.length; i++) {
       const isCommitted = i < committedWords.length;
@@ -888,6 +925,8 @@
       scriptProcessor.connect(audioContext.destination);
       
       isRecording = true;
+      // Shimmer only if no words are up yet (a mid-dictation restart keeps its text)
+      if (!streamWords.length) listeningShimmer.classList.add('on');
       console.log("Recording and streaming audio.");
       rendererLog('recording streaming audio');
     } catch (err) {
@@ -908,6 +947,7 @@
   function stopCapture() {
     isRecording = false;
     volumeVal = 0.05;
+    listeningShimmer.classList.remove('on');
 
     // The whole recording's audio-level truth, one line: avg/peak RMS and how
     // many chunks actually went to the server. avg≈0 = the mic delivered
