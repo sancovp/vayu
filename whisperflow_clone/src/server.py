@@ -15,10 +15,46 @@ from whisperflow_clone.src.bias import read_bias
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("whisperflow_clone.server")
 
+# Sessions currently streaming — the keep-warm beat skips while one is live.
+_active_sessions = 0
+
+KEEPWARM_INTERVAL_SEC = 240   # 4 min — well inside the idle horizon that went cold
+
+
+async def _keepwarm_loop(model):
+    """Run a tiny inference on a cadence so the model NEVER goes cold.
+
+    After hours idle, the first real inference took >9s (measured 2026-08-28
+    04:40: flush parsed, 3.58s of voiced audio in the buffer, worker silent for
+    the whole 10s window — stuck inside its first transcribe). Cold cost =
+    paged-out weights + evicted Metal state + App Nap throttling the idle
+    process. A half-second dummy transcription every few minutes keeps all
+    three hot, and the steady activity keeps App Nap off the process. Cost:
+    well under a second of GPU every 4 minutes.
+    """
+    beats = 0
+    while True:
+        await asyncio.sleep(KEEPWARM_INTERVAL_SEC)
+        if _active_sessions > 0:
+            continue  # a real session is already keeping everything hot
+        try:
+            t0 = asyncio.get_event_loop().time()
+            await transcribe_audio_chunks_async(model, [b"\x00" * 16000])
+            took = asyncio.get_event_loop().time() - t0
+            beats += 1
+            # One line an hour is enough to prove liveness; a slow beat is the
+            # cold-start smoking gun and always worth a line.
+            if took > 2.0 or beats % 15 == 0:
+                logger.info(f"keep-warm beat #{beats}: {took:.2f}s{' — WAS COLD' if took > 2.0 else ''}")
+        except Exception as e:
+            logger.error(f"keep-warm beat failed: {e}")
+
+
 # Preload model on startup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Initializing server: preloading Whisper model...")
+    keepwarm_task = None
     try:
         model = load_whisper_model()
         # Warm through the SAME executor path the worker uses — the first
@@ -26,9 +62,12 @@ async def lifespan(app: FastAPI):
         # must not land on the user's first utterance.
         await transcribe_audio_chunks_async(model, [b"\x00" * 32000])
         logger.info("Model warmed through executor path.")
+        keepwarm_task = asyncio.create_task(_keepwarm_loop(model))
     except Exception as e:
         logger.error(f"Failed to preload model: {e}")
     yield
+    if keepwarm_task:
+        keepwarm_task.cancel()
     logger.info("Server shutting down.")
 
 app = FastAPI(lifespan=lifespan)
@@ -161,7 +200,9 @@ async def transcription_worker(websocket: WebSocket, model, audio_buffer: AudioB
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    global _active_sessions
     await websocket.accept()
+    _active_sessions += 1
     logger.info("WebSocket connection accepted.")
     
     model = load_whisper_model()
@@ -211,6 +252,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Error in WebSocket session: {e}", exc_info=True)
     finally:
+        _active_sessions -= 1
         worker_task.cancel()
         try:
             await worker_task
