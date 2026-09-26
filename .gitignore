@@ -31,3 +31,6 @@ whisperflow_clone/.venv/
 whisperflow_clone/**/__pycache__/
 whisperflow_clone/models/*.pt
 stt-venv/
+
+# This project's scratchpad (host scratchpad rule 7) — notes, never in git
+.claude/rules/vayu_scratchpad.md

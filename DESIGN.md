@@ -193,6 +193,32 @@ you feel the system obey. Substrate = the existing per-word span array (`streamW
 * ASPIRATIONAL: Capacitor native wrapper (share extension / app-store / background audio) —
   a follow-up once we can test on a device.
 
+### I. Voice commands — create · tell · replace · pipe, with progressive approval (ASPIRATIONAL)
+Vayu picks up every command and routes it with **its own command system** (§D: the route table, `{wake}`, the
+contacts resolver); a command reaches an agent through `cave.send` — the canonical agent lane (SEAM-CONTRACT C5
+Lane 1), on OM's daemon at `:8126`. Classifying stays Vayu's; the agentic work stays the agent's (§1).
+* **create** — "hey vayu create a <rule | skill | file> in <project | user global | path> that says [content]": a
+  **tell** with defaults — the contact `om`, and the skill that authors that kind.
+* **tell** — "hey vayu tell <contact> prompt: run <skill> [to create a <kind> in <scope>] that says/explains
+  [content]".
+* **replace** — "hey vayu replace the blob that goes like <quote> with <new text>" (or "the section like that"):
+  **Jev** (TypeSafe's typed-decision model) finds where the quote and the new text END inside the utterance, and the
+  passage in the target file the quote describes, with its exact start and end; heaven's **NetworkEditTool**
+  `str_replace` then swaps exactly that text.
+* **pipe** — a command carries transcripts as its content: "that" (the last dictation), a span of dictation, the
+  file or selection OM Explorer has open.
+
+**Where.** "Project" = the project OM Explorer has open, or the one named. "User global" = the global user devdir
+of the agent the command is addressed to (`~/.claude` for Claude Code, `~/.heaven` for OM). A path = a spoken path
+or an OM Explorer favorite, matched the way OM Explorer's go-to box matches. **OM Explorer supplies the context**:
+a state file it writes (root · active file · selection · favorites) is what "this file", "here" and "this project"
+mean; a created or changed file opens in it, which is where you see the result.
+
+**Approval or Auto — a setting.** *Auto*: a recognized command is routed at once. *Approval*: a command is a
+**pending draft** that grows across utterances — nothing said is lost. Voice edits apply to the draft while it is
+unapproved: add to it, and "replace this with that" inside it (the same Jev-located replace, on the draft's text).
+The draft is shown as it grows, and only an approval routes it.
+
 ---
 
 ## 3. Build & Package

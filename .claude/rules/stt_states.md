@@ -11,10 +11,10 @@
 ## State (2026-08-27)
 | item | status | note |
 |---|---|---|
-| flush-on-stop handshake | BUILT 2026-08-27 | **the "it doesn't pick up sound" bug.** All three segment-close rules (2 stable passes / 0.8s trailing silence / 15s cap) are free-running and none can fire when the user stops talking and releases the hotkey together; `stopAndPaste` closed the WS at once, the worker was cancelled mid-utterance and the audio discarded untranscribed. `{"cmd":"flush"}` now force-closes the segment and always acks `flushed:true`; `stopAndPaste` stops the mic → awaits flush → closes. Measured: 1.2s utterance 0 msgs → `'Open the dashboard.'`; 4.8s sentence 0 finals → full transcript incl. the trailing clause the old path always lost |
-| mic pre-warm + hot stream | BUILT 2026-08-27 | first `getUserMedia` after launch took 3.6s while the user was already talking — speech lost before the stream existed. Stream now acquired at window load and kept alive for the app's lifetime (device label logged; per-recording avg/peak RMS logged, explicit MIC DELIVERED SILENCE marker). Confirmed working: two real dictations pasted ("Testing", "Trying it again.") |
+| flush-on-stop handshake | BUILT 2026-08-27 | stop → flush → close: the segment is forced closed and always acked, so the last words are transcribed → `vayu_scratchpad.md` |
+| mic pre-warm + hot stream | BUILT 2026-08-27 | the mic stream is opened at window load and kept for the app's life → `vayu_scratchpad.md` |
 | quit-gate while processing | BUILT 2026-08-27 | Isaac's "don't force close mid-processing": all quit paths funnel through `app.quit()`, one `before-quit` gate defers quit while the renderer's stop-cycle (flush→corrections→clipboard→paste) is flagged busy, 10s ceiling |
-| cold-model keep-warm + real-speech warmup | BUILT 2026-08-28 | **the "first open fails, second works" root cause, caught by the instrumentation:** after hours idle (and even 30s after a fresh start), the first REAL inference took >3-9s — flush parsed, voiced audio in buffer, worker stuck inside transcribe until the client's 5s timeout lost the utterance; the stranded inference then re-warmed everything, which is why attempt 2 always worked and probes-minutes-later never reproduced it. Silence warm-up provably insufficient (all-zeros decodes trivially). Now: 3s recorded speech `warmup.pcm` + bias prompt at startup AND on a 4-min keep-warm beat (skipped while a session streams; slow beat logged as WAS COLD); silero pre-loaded at startup. Verified: fresh-start probes return finals where the identical probe failed |
+| cold-model keep-warm + real-speech warmup | BUILT 2026-08-28 | a 3 s recorded-speech warm-up at start + a 4-min keep-warm beat; the root cause → `vayu_scratchpad.md` |
 | flush-empty-but-partial-saved | WATCH | one real dictation's flush transcribed the full buffer to '' while a mid-stream partial had already captured the text — paste worked via the partial fallback. Instrumentation (server logs control frames verbatim + per-session totals) stays in to attribute any recurrence |
 | 50KB log cap (all 3 writers) | BUILT 2026-08-27 | `vayu_runtime.log` had reached 84MB, ~all of it one line per SPACEBAR PRESS from helper debug stdout. Keystroke chatter is now never persisted, identical consecutive lines collapse, and any log crossing 50KB is trimmed to its newest half. 88MB reclaimed |
 | mlx large-v3-turbo backend | BUILT | default when mlx importable; weights cache ~/.cache/huggingface |
@@ -22,4 +22,17 @@
 | 4x chunk-timing fix | BUILT | old code assumed 64ms chunks vs real 256ms |
 | stt-venv at `<DATA_DIR>/stt-venv` | BUILT | where main.js health-check/spawn expects it |
 | stale scratch server killed | see session | `~/.gemini/antigravity/scratch/whisperflow_clone` ran the LIVE STT until 2026-07-16 (0.0.0.0, no bias, tiny.en) — never serve from it again |
-| packaged `/Applications/Vayu.app` | RE-PACKED 2026-08-07 | was frozen at the **Jul-5** build, which predates `startWhisperServer` (added Jul-16, `c00a255`) and bundled **no** `whisperflow_clone` at all — so the app never started :8181 and every dictation died as `Transcriber WS error: [object Event]` (connection refused). Re-packed from `cd17d67` via `npm run package-mac`, signed "Vayu Local Code Signing"; bundle now carries `main.js` with `startWhisperServer` + the vendored `whisperflow_clone/src`, so the app owns its own STT lifecycle |
+| packaged `/Applications/Vayu.app` | RE-PACKED 2026-08-07 | re-packed from `cd17d67` with `startWhisperServer` and the vendored `whisperflow_clone/src`; the app owns its STT → `vayu_scratchpad.md` |
+
+## VOICE COMMANDS
+
+The lane `DESIGN.md` §I states. Phases: **DESIGNED** (§I states it) → **BUILT** (the code does it) → **VERIFIED**
+(proven live, or by a test). `●` = reached.
+
+| deliverable | DESIGNED | BUILT | VERIFIED | detail |
+|---|:-:|:-:|:-:|---|
+| command routes — create · tell · replace · pipe, in Vayu's command system | ● |  |  | `DESIGN.md` §I |
+| the pending draft + progressive approval; the Approval / Auto setting | ● |  |  | `DESIGN.md` §I |
+| Jev boundaries — the utterance's quote and new text · the passage in a file | ● |  |  | `DESIGN.md` §I |
+| NetworkEditTool replace of the located span | ● |  |  | `DESIGN.md` §I |
+| OM Explorer as context and landing (its state file · the result opens in it) | ● |  |  | `DESIGN.md` §I · OM `DESIGN.md` §37 |
